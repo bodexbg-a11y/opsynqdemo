@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Plus } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/card";
 import { TeamsGrid } from "@/components/modules/teams-grid";
@@ -6,7 +8,19 @@ export default function TeamsPage() {
   const { teams, employees, projects } = getStore();
   return (
     <div className="space-y-5 pb-10">
-      <PageHeader title="Construction Teams" subtitle={`${teams.length} crews · ${employees.filter((e) => e.teamId).length} field employees`} />
+      <PageHeader
+        title="Construction Teams"
+        subtitle={`${teams.length} crews · ${employees.filter((e) => e.teamId).length} field employees`}
+        action={
+          <Link
+            href="/teams/new"
+            className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+          >
+            <Plus className="w-4 h-4" />
+            New Team
+          </Link>
+        }
+      />
       <TeamsGrid teams={teams} employees={employees} projects={projects} />
     </div>
   );

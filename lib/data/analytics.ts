@@ -253,3 +253,37 @@ export function findUnderperformingCampaigns() {
   const { adCampaigns } = getStore();
   return adCampaigns.filter((c) => c.status === "Active" && c.roas < 1.5).sort((a, b) => a.roas - b.roas);
 }
+
+export interface ClientStats {
+  totalProjects: number;
+  totalInvoiced: number;
+  outstandingBalance: number;
+}
+
+/** Computed live from current projects/invoices so newly created or imported
+ * records are always reflected, instead of trusting a stored snapshot field. */
+export function getAllClientStats(): Map<string, ClientStats> {
+  const { projects, invoices } = getStore();
+  const stats = new Map<string, ClientStats>();
+  const ensure = (clientId: string) => {
+    let s = stats.get(clientId);
+    if (!s) {
+      s = { totalProjects: 0, totalInvoiced: 0, outstandingBalance: 0 };
+      stats.set(clientId, s);
+    }
+    return s;
+  };
+  projects.forEach((p) => {
+    ensure(p.clientId).totalProjects += 1;
+  });
+  invoices.forEach((iv) => {
+    const s = ensure(iv.clientId);
+    s.totalInvoiced += iv.amount;
+    if (iv.status === "Overdue" || iv.status === "Pending") s.outstandingBalance += iv.amount;
+  });
+  return stats;
+}
+
+export function getClientStats(clientId: string): ClientStats {
+  return getAllClientStats().get(clientId) ?? { totalProjects: 0, totalInvoiced: 0, outstandingBalance: 0 };
+}

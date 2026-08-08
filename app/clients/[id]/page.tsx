@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Mail, Phone, MapPin, MessageCircle, Building2, Receipt, FileText } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { getClientStats } from "@/lib/data/analytics";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
-import { Badge, ProjectStatusBadge, InvoiceStatusBadge } from "@/components/ui/badge";
+import { ProjectStatusBadge, InvoiceStatusBadge } from "@/components/ui/badge";
+import { ClientStatusSelect } from "@/components/modules/client-status-select";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,13 +17,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const clientProjects = projects.filter((p) => p.clientId === client.id);
   const clientInvoices = invoices.filter((iv) => iv.clientId === client.id);
   const clientContracts = contracts.filter((c) => c.clientId === client.id);
+  const stats = getClientStats(client.id);
 
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
         title={client.company}
         subtitle={`${client.industry} · Client since ${formatDate(client.since)}`}
-        action={<Badge variant={client.status === "Active" ? "success" : client.status === "Lead" ? "blue" : "neutral"}>{client.status}</Badge>}
+        action={<ClientStatusSelect clientId={client.id} status={client.status} className="text-[12.5px] py-1.5" />}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -47,15 +50,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <div className="grid grid-cols-3 gap-4">
             <Card className="p-4">
               <p className="text-[11px] text-ink-400 uppercase tracking-wide">Total Projects</p>
-              <p className="text-[18px] font-semibold text-ink-900 mt-1">{client.totalProjects}</p>
+              <p className="text-[18px] font-semibold text-ink-900 mt-1">{stats.totalProjects}</p>
             </Card>
             <Card className="p-4">
               <p className="text-[11px] text-ink-400 uppercase tracking-wide">Total Invoiced</p>
-              <p className="text-[18px] font-semibold text-ink-900 mt-1">{formatCurrency(client.totalInvoiced, { compact: true })}</p>
+              <p className="text-[18px] font-semibold text-ink-900 mt-1">{formatCurrency(stats.totalInvoiced, { compact: true })}</p>
             </Card>
             <Card className="p-4">
               <p className="text-[11px] text-ink-400 uppercase tracking-wide">Outstanding</p>
-              <p className={`text-[18px] font-semibold mt-1 ${client.outstandingBalance > 0 ? "text-warning-500" : "text-ink-900"}`}>{formatCurrency(client.outstandingBalance, { compact: true })}</p>
+              <p className={`text-[18px] font-semibold mt-1 ${stats.outstandingBalance > 0 ? "text-warning-500" : "text-ink-900"}`}>{formatCurrency(stats.outstandingBalance, { compact: true })}</p>
             </Card>
           </div>
 

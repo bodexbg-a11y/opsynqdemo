@@ -18,12 +18,12 @@ import type {
   AdPlatform,
   CampaignObjective,
   ProjectStatus,
-  TeamSpecialty,
   TaskStatus,
   TaskPriority,
   SubTrade,
   EquipmentType,
 } from "./types";
+import { TEAM_SPECIALTIES } from "./constants";
 
 const COUNTS = {
   projects: 40,
@@ -123,18 +123,6 @@ const CERTIFICATIONS = [
   "PMP",
 ];
 
-const TEAM_SPECIALTIES: TeamSpecialty[] = [
-  "Framing",
-  "Concrete",
-  "Electrical",
-  "Plumbing",
-  "Roofing",
-  "Masonry",
-  "HVAC",
-  "Excavation",
-  "Finishing",
-  "General Labor",
-];
 
 const PROJECT_TYPES: { prefix: string; category: Project["category"] }[] = [
   { prefix: "Residence", category: "Residential" },

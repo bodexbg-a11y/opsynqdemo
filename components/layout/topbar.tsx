@@ -41,10 +41,13 @@ export function Topbar({ notifications }: { notifications: AppNotification[] }) 
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <button className="hidden sm:flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20">
+        <Link
+          href="/projects/new"
+          className="hidden sm:flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+        >
           <Plus className="w-4 h-4" />
           New Project
-        </button>
+        </Link>
 
         <div className="relative">
           <button
