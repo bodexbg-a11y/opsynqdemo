@@ -303,3 +303,33 @@ export interface AppNotification {
   severity: "info" | "warning" | "critical";
   link?: string;
 }
+
+export type AdPlatform = "Facebook" | "Google";
+export type CampaignStatus = "Active" | "Paused" | "Ended" | "Draft";
+export type CampaignObjective =
+  | "Lead Generation"
+  | "Brand Awareness"
+  | "Website Traffic"
+  | "Conversions"
+  | "Local Reach";
+
+export interface AdCampaign {
+  id: string;
+  platform: AdPlatform;
+  name: string;
+  objective: CampaignObjective;
+  status: CampaignStatus;
+  projectId: string | null;
+  budget: number;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  leads: number;
+  conversions: number;
+  costPerConversion: number;
+  roas: number;
+  startDate: string;
+  endDate: string | null;
+}

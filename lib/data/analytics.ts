@@ -1,5 +1,5 @@
 import { getStore } from "./store";
-import type { Project, Task } from "./types";
+import type { Project, Task, AdPlatform } from "./types";
 
 const NOW = new Date("2026-08-07");
 
@@ -197,4 +197,59 @@ export function getTaskCountsByStatus() {
   const { tasks } = getStore();
   const statuses: Task["status"][] = ["To Do", "In Progress", "Blocked", "Completed"];
   return statuses.map((status) => ({ status, count: tasks.filter((t) => t.status === status).length }));
+}
+
+export function getCampaignKpis() {
+  const { adCampaigns } = getStore();
+  const active = adCampaigns.filter((c) => c.status === "Active");
+  const totalSpend = adCampaigns.reduce((s, c) => s + c.spend, 0);
+  const totalLeads = adCampaigns.reduce((s, c) => s + c.leads, 0);
+  const totalConversions = adCampaigns.reduce((s, c) => s + c.conversions, 0);
+  const blendedRoas = totalSpend ? adCampaigns.reduce((s, c) => s + c.roas * c.spend, 0) / totalSpend : 0;
+  return {
+    activeCampaigns: active.length,
+    totalCampaigns: adCampaigns.length,
+    totalSpend,
+    totalLeads,
+    totalConversions,
+    blendedRoas,
+  };
+}
+
+export function getCampaignSpendByPlatform() {
+  const { adCampaigns } = getStore();
+  const platforms: AdPlatform[] = ["Facebook", "Google"];
+  return platforms.map((platform) => {
+    const items = adCampaigns.filter((c) => c.platform === platform);
+    return {
+      platform,
+      spend: items.reduce((s, c) => s + c.spend, 0),
+      leads: items.reduce((s, c) => s + c.leads, 0),
+      conversions: items.reduce((s, c) => s + c.conversions, 0),
+    };
+  });
+}
+
+export function getCampaignSpendSeries() {
+  const months = ["Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+  const { adCampaigns } = getStore();
+  const totalSpend = adCampaigns.reduce((s, c) => s + c.spend, 0) || 1;
+  return months.map((month, idx) => {
+    const weight = 0.7 + Math.sin(idx / 2) * 0.25 + idx * 0.05;
+    return {
+      month,
+      facebook: Math.round((totalSpend / months.length) * weight * 0.55),
+      google: Math.round((totalSpend / months.length) * weight * 0.45),
+    };
+  });
+}
+
+export function rankCampaignsByRoas() {
+  const { adCampaigns } = getStore();
+  return [...adCampaigns].sort((a, b) => b.roas - a.roas);
+}
+
+export function findUnderperformingCampaigns() {
+  const { adCampaigns } = getStore();
+  return adCampaigns.filter((c) => c.status === "Active" && c.roas < 1.5).sort((a, b) => a.roas - b.roas);
 }

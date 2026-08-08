@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
+import Link from "next/link";
+import { Check, ArrowUpRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -11,9 +12,13 @@ interface Integration {
   connected: boolean;
   color: string;
   initial: string;
+  href?: string;
+  hrefLabel?: string;
 }
 
 const INTEGRATIONS: Integration[] = [
+  { name: "Facebook Ads", desc: "Track campaign spend, leads and ROAS from Meta Ads Manager", connected: true, color: "bg-[#1877F2]", initial: "f", href: "/marketing", hrefLabel: "View campaigns" },
+  { name: "Google Ads", desc: "Sync Search, Performance Max and Display campaign performance", connected: true, color: "bg-gradient-to-br from-[#4285F4] via-[#34A853] to-[#FBBC05]", initial: "G", href: "/marketing", hrefLabel: "View campaigns" },
   { name: "Google Calendar", desc: "Sync project deadlines and crew schedules", connected: true, color: "bg-blue-500", initial: "G" },
   { name: "Microsoft Outlook", desc: "Two-way calendar and email sync", connected: true, color: "bg-sky-600", initial: "O" },
   { name: "QuickBooks", desc: "Sync invoices, expenses and payroll", connected: true, color: "bg-success-500", initial: "Q" },
@@ -47,6 +52,11 @@ export function IntegrationsGrid() {
             </div>
           </div>
           <p className="text-[12px] text-ink-500 mt-3 leading-relaxed">{integration.desc}</p>
+          {integration.connected && integration.href && (
+            <Link href={integration.href} className="inline-flex items-center gap-1 text-[11.5px] font-medium text-blue-600 hover:text-blue-700 mt-2">
+              {integration.hrefLabel ?? "Open"} <ArrowUpRight className="w-3 h-3" />
+            </Link>
+          )}
           <button
             onClick={() =>
               setState((prev) => prev.map((it, idx) => (idx === i ? { ...it, connected: !it.connected } : it)))

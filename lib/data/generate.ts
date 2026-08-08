@@ -14,6 +14,9 @@ import type {
   PurchaseOrder,
   DocumentItem,
   AppNotification,
+  AdCampaign,
+  AdPlatform,
+  CampaignObjective,
   ProjectStatus,
   TeamSpecialty,
   TaskStatus,
@@ -37,6 +40,7 @@ const COUNTS = {
   purchaseOrders: 60,
   documents: 220,
   notifications: 30,
+  adCampaigns: 48,
 };
 
 const CONSTRUCTION_ROLES = [
@@ -224,6 +228,40 @@ const EQUIPMENT_CATALOG: { name: string; type: EquipmentType }[] = [
   { name: "Atlas Copco Air Compressor", type: "Compressor" },
 ];
 
+const CAMPAIGN_OBJECTIVES: CampaignObjective[] = [
+  "Lead Generation",
+  "Brand Awareness",
+  "Website Traffic",
+  "Conversions",
+  "Local Reach",
+];
+
+const FACEBOOK_CAMPAIGN_TEMPLATES = [
+  "New Home Builds — Lead Gen",
+  "Kitchen & Bath Remodel Leads",
+  "Custom Home Showcase Video",
+  "Free Estimate Offer",
+  "Before/After Renovation Carousel",
+  "Local Homeowners Retargeting",
+  "Spring Renovation Promo",
+  "Commercial Build Awareness",
+  "Referral Program Boost",
+  "Instagram Reels — Site Progress",
+];
+
+const GOOGLE_CAMPAIGN_TEMPLATES = [
+  "General Contractor — Search",
+  "Kitchen Remodel — Search",
+  "Home Addition — Search",
+  "Commercial Construction — Search",
+  "Emergency Roofing — Search",
+  "Local Services Ads",
+  "Performance Max — Residential",
+  "Display Remarketing — Site Visitors",
+  "YouTube — Company Showcase",
+  "Near Me — Construction Company",
+];
+
 function rand<T>(arr: readonly T[]): T {
   return faker.helpers.arrayElement(arr as T[]);
 }
@@ -255,6 +293,7 @@ export interface Store {
   purchaseOrders: PurchaseOrder[];
   documents: DocumentItem[];
   notifications: AppNotification[];
+  adCampaigns: AdCampaign[];
 }
 
 export function generateStore(seed = 1337): Store {
@@ -759,6 +798,69 @@ export function generateStore(seed = 1337): Store {
     };
   });
 
+  // ---------- Ad Campaigns (Facebook Ads + Google Ads) ----------
+  const NOW_DATE = new Date("2026-08-07");
+  const adCampaigns: AdCampaign[] = Array.from({ length: COUNTS.adCampaigns }, (_, i) => {
+    const platform: AdPlatform = i % 2 === 0 ? "Facebook" : "Google";
+    const template = platform === "Facebook" ? rand(FACEBOOK_CAMPAIGN_TEMPLATES) : rand(GOOGLE_CAMPAIGN_TEMPLATES);
+    const objective = rand(CAMPAIGN_OBJECTIVES);
+    const startDate = faker.date.past({ years: 1 });
+    const isOngoing = faker.datatype.boolean({ probability: 0.55 });
+    const endDate = isOngoing ? null : faker.date.between({ from: startDate, to: NOW_DATE });
+    const status = isOngoing
+      ? rand<AdCampaign["status"]>(["Active", "Active", "Active", "Paused"])
+      : rand<AdCampaign["status"]>(["Ended", "Ended", "Paused"]);
+
+    const budget = faker.number.int({ min: 500, max: 18000 });
+    const spendRatio = faker.number.float({ min: 0.4, max: 1.08, fractionDigits: 2 });
+    const spend = Math.round(budget * spendRatio);
+
+    // Build the funnel forward from spend so every downstream metric (clicks, CPC, leads,
+    // conversions, ROAS) stays internally consistent instead of drifting to implausible extremes.
+    const cpc = Number(
+      (platform === "Facebook"
+        ? faker.number.float({ min: 0.6, max: 2.6, fractionDigits: 2 })
+        : faker.number.float({ min: 1.2, max: 6.2, fractionDigits: 2 })
+      ).toFixed(2)
+    );
+    const clicks = Math.max(1, Math.round(spend / cpc));
+    const ctr = faker.number.float({ min: 0.7, max: 4.2, fractionDigits: 2 });
+    const impressions = Math.round(clicks / (ctr / 100));
+
+    const performancePenalty = status === "Active" ? 1 : 0.6;
+    const clickToLeadRate = faker.number.float({ min: 0.012, max: 0.055, fractionDigits: 3 }) * performancePenalty;
+    const leads = Math.round(clicks * clickToLeadRate);
+    const leadToSaleRate = faker.number.float({ min: 0.05, max: 0.16, fractionDigits: 3 }) * performancePenalty;
+    const conversions = Math.round(leads * leadToSaleRate);
+    const costPerConversion = conversions > 0 ? Number((spend / conversions).toFixed(2)) : spend;
+    const avgDealValue = faker.number.int({ min: 3000, max: 9500 });
+    const roas = spend > 0 ? Math.min(25, Number(((conversions * avgDealValue) / spend).toFixed(2))) : 0;
+
+    const linkToProject = faker.datatype.boolean({ probability: 0.45 });
+    const project = linkToProject ? rand(projects) : null;
+
+    return {
+      id: id("CMP", i + 1),
+      platform,
+      name: `${template}${project ? ` — ${project.city}` : ""}`,
+      objective,
+      status,
+      projectId: project?.id ?? null,
+      budget,
+      spend,
+      impressions,
+      clicks,
+      ctr,
+      cpc,
+      leads,
+      conversions,
+      costPerConversion,
+      roas,
+      startDate: startDate.toISOString(),
+      endDate: endDate ? endDate.toISOString() : null,
+    };
+  });
+
   // ---------- Notifications ----------
   const behindProjects = projects.filter((p) => p.status === "Behind Schedule");
   const overdueInvoices = invoices.filter((iv) => iv.status === "Overdue");
@@ -841,5 +943,6 @@ export function generateStore(seed = 1337): Store {
     purchaseOrders,
     documents,
     notifications,
+    adCampaigns,
   };
 }

@@ -5,6 +5,9 @@ import {
   rankTeamsByPerformance,
   findOverdueInvoices,
   getTodaysTasks,
+  getCampaignKpis,
+  rankCampaignsByRoas,
+  findUnderperformingCampaigns,
 } from "./analytics";
 import { formatCurrency, formatDate } from "../utils";
 
@@ -75,6 +78,29 @@ export function answerCompanySummary() {
   ].join(" ");
 }
 
+export function answerCampaignPerformance() {
+  const kpis = getCampaignKpis();
+  const ranked = rankCampaignsByRoas();
+  const top = ranked.slice(0, 4);
+  const topLines = top.map(
+    (c) => `• ${c.name} (${c.platform}) — ${c.roas.toFixed(1)}x ROAS, ${formatCurrency(c.spend, { compact: true })} spent, ${c.conversions} conversions`
+  );
+  return [
+    `Across ${kpis.totalCampaigns} campaigns (${kpis.activeCampaigns} active) on Facebook Ads + Google Ads, you've spent ${formatCurrency(kpis.totalSpend, { compact: true })} generating ${kpis.totalLeads} leads and ${kpis.totalConversions} conversions.`,
+    `Blended ROAS is ${kpis.blendedRoas.toFixed(2)}x.`,
+    `Best performing campaigns:\n${topLines.join("\n")}`,
+  ].join("\n\n");
+}
+
+export function answerUnderperformingCampaigns() {
+  const underperformers = findUnderperformingCampaigns();
+  if (!underperformers.length) return "All active ad campaigns are currently returning a healthy ROAS (1.5x or better) — no underperforming campaigns to flag right now.";
+  const lines = underperformers
+    .slice(0, 6)
+    .map((c) => `• ${c.name} (${c.platform}) — ${c.roas.toFixed(1)}x ROAS, ${formatCurrency(c.spend, { compact: true })} spent, ${c.costPerConversion > 0 ? `${formatCurrency(c.costPerConversion)} per conversion` : "no conversions yet"}`);
+  return `${underperformers.length} active campaign${underperformers.length > 1 ? "s are" : " is"} underperforming (ROAS below 1.5x):\n\n${lines.join("\n")}\n\nRecommend pausing or reworking targeting/creative on ${underperformers[0].name} first — it has the lowest return.`;
+}
+
 export interface PresetQA {
   question: string;
   answer: string;
@@ -89,5 +115,7 @@ export function getPresetAnswers(): PresetQA[] {
     { question: "Which invoices are overdue?", answer: answerOverdueInvoices(), keywords: ["invoice", "overdue", "unpaid", "collections", "payment"] },
     { question: "What should I focus on today?", answer: answerTodayFocus(), keywords: ["today", "focus", "priorit"] },
     { question: "Summarize today's company status.", answer: answerCompanySummary(), keywords: ["summary", "summarize", "status", "overview", "company"] },
+    { question: "How are my ad campaigns performing?", answer: answerCampaignPerformance(), keywords: ["campaign", "ad", "ads", "facebook", "google", "roas", "marketing"] },
+    { question: "Which ad campaigns are underperforming?", answer: answerUnderperformingCampaigns(), keywords: ["underperform", "bad campaign", "low roas", "pause"] },
   ];
 }

@@ -17,6 +17,7 @@ import {
   Plug,
   Bell,
   Settings,
+  Megaphone,
 } from "lucide-react";
 
 export interface NavItem {
@@ -60,6 +61,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Clients", href: "/clients", icon: Contact },
       { label: "Subcontractors", href: "/subcontractors", icon: Wrench, tier: "addon" },
+      { label: "Marketing", href: "/marketing", icon: Megaphone, tier: "addon" },
     ],
   },
   {

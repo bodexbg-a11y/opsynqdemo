@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navGroups } from "./nav-config";
 import { cn } from "@/lib/utils";
-import { HardHat, Lock } from "lucide-react";
+import { HardHat, Star } from "lucide-react";
 
 export function Sidebar({ notificationCount = 0 }: { notificationCount?: number }) {
   const pathname = usePathname();
@@ -48,13 +48,12 @@ export function Sidebar({ notificationCount = 0 }: { notificationCount?: number 
                     <Icon className={cn("w-[15px] h-[15px] shrink-0", active ? "text-blue-400" : "text-ink-400 group-hover:text-ink-200")} strokeWidth={2} />
                     <span className="truncate flex-1">{item.label}</span>
                     {item.tier === "addon" && (
-                      <span
-                        title="Доступно как платный доп-модуль"
-                        className="ml-auto shrink-0 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide text-amber-300 bg-amber-400/10 border border-amber-400/25 rounded-full px-1.5 py-[3px]"
+                      <Star
+                        className="ml-auto shrink-0 w-3 h-3 text-amber-300 fill-amber-300"
+                        strokeWidth={2}
                       >
-                        <Lock className="w-2.5 h-2.5" strokeWidth={2.5} />
-                        Add-on
-                      </span>
+                        <title>Доступно как платный доп-модуль</title>
+                      </Star>
                     )}
                     {item.badgeKey === "notifications" && notificationCount > 0 && (
                       <span className="ml-auto text-[10px] font-semibold bg-blue-500 text-white rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
