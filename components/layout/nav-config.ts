@@ -24,6 +24,7 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   badgeKey?: "notifications";
+  tier?: "addon";
 }
 
 export interface NavGroup {
@@ -36,7 +37,7 @@ export const navGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { label: "Dashboard", href: "/", icon: LayoutDashboard },
-      { label: "AI Assistant", href: "/ai-assistant", icon: Sparkles },
+      { label: "AI Assistant", href: "/ai-assistant", icon: Sparkles, tier: "addon" },
     ],
   },
   {
@@ -44,7 +45,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Projects", href: "/projects", icon: Building2 },
       { label: "Tasks", href: "/tasks", icon: KanbanSquare },
-      { label: "Scheduling", href: "/scheduling", icon: CalendarDays },
+      { label: "Scheduling", href: "/scheduling", icon: CalendarDays, tier: "addon" },
     ],
   },
   {
@@ -58,29 +59,29 @@ export const navGroups: NavGroup[] = [
     label: "Relationships",
     items: [
       { label: "Clients", href: "/clients", icon: Contact },
-      { label: "Subcontractors", href: "/subcontractors", icon: Wrench },
+      { label: "Subcontractors", href: "/subcontractors", icon: Wrench, tier: "addon" },
     ],
   },
   {
     label: "Resources",
     items: [
-      { label: "Equipment", href: "/equipment", icon: Truck },
-      { label: "Warehouse", href: "/warehouse", icon: Warehouse },
+      { label: "Equipment", href: "/equipment", icon: Truck, tier: "addon" },
+      { label: "Warehouse", href: "/warehouse", icon: Warehouse, tier: "addon" },
     ],
   },
   {
     label: "Business",
     items: [
-      { label: "Finance", href: "/finance", icon: Wallet },
+      { label: "Finance", href: "/finance", icon: Wallet, tier: "addon" },
       { label: "Documents", href: "/documents", icon: FolderClosed },
-      { label: "Reports", href: "/reports", icon: BarChart3 },
+      { label: "Reports", href: "/reports", icon: BarChart3, tier: "addon" },
     ],
   },
   {
     label: "System",
     items: [
       { label: "Notifications", href: "/notifications", icon: Bell, badgeKey: "notifications" },
-      { label: "Integrations", href: "/integrations", icon: Plug },
+      { label: "Integrations", href: "/integrations", icon: Plug, tier: "addon" },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },

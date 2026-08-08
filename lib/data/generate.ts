@@ -591,7 +591,12 @@ export function generateStore(seed = 1337): Store {
     let paidDate: string | null = null;
     if (faker.datatype.boolean({ probability: 0.55 })) {
       status = "Paid";
-      paidDate = faker.date.between({ from: issueDate, to: new Date(Math.min(dueDate.getTime() + 15 * 86400000, now.getTime())) }).toISOString();
+      const latestPossiblePaid = new Date(Math.min(dueDate.getTime() + 15 * 86400000, now.getTime()));
+      paidDate = (
+        latestPossiblePaid.getTime() > issueDate.getTime()
+          ? faker.date.between({ from: issueDate, to: latestPossiblePaid })
+          : issueDate
+      ).toISOString();
     } else if (dueDate < now) {
       status = "Overdue";
     } else if (faker.datatype.boolean({ probability: 0.15 })) {
