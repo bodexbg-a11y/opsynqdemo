@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { getStore } from "@/lib/data/store";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { QrCode, Star } from "lucide-react";
+import { QrCode, Star, Plus, Pencil } from "lucide-react";
 
 export default function WarehousePage() {
   const { materials, suppliers, purchaseOrders } = getStore();
@@ -12,7 +13,19 @@ export default function WarehousePage() {
 
   return (
     <div className="space-y-5 pb-10">
-      <PageHeader title="Warehouse" subtitle={`${materials.length} SKUs tracked · ${lowStock.length} below reorder level`} />
+      <PageHeader
+        title="Warehouse"
+        subtitle={`${materials.length} SKUs tracked · ${lowStock.length} below reorder level`}
+        action={
+          <Link
+            href="/warehouse/materials/new"
+            className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+          >
+            <Plus className="w-4 h-4" />
+            New Material
+          </Link>
+        }
+      />
       <Tabs
         tabs={[
           {
@@ -29,6 +42,7 @@ export default function WarehousePage() {
                         <th className="px-4 py-3 font-medium">Location</th>
                         <th className="px-4 py-3 font-medium">Unit Cost</th>
                         <th className="px-4 py-3 font-medium">QR</th>
+                        <th className="px-4 py-3 font-medium"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -52,6 +66,11 @@ export default function WarehousePage() {
                             <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{m.warehouseLocation}</td>
                             <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{formatCurrency(m.unitCost)}</td>
                             <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{m.qrCode}</span></td>
+                            <td className="px-4 py-3">
+                              <Link href={`/warehouse/materials/${m.id}/edit`} className="flex items-center gap-1 text-ink-400 hover:text-blue-600 transition-colors">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Link>
+                            </td>
                           </tr>
                         );
                       })}

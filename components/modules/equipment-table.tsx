@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, QrCode, MapPin, Wrench } from "lucide-react";
+import { Search, QrCode, MapPin, Pencil } from "lucide-react";
 import type { Equipment, Project } from "@/lib/data/types";
-import { Badge } from "@/components/ui/badge";
+import { EquipmentStatusSelect } from "./equipment-status-select";
 import { cn, formatDate } from "@/lib/utils";
 
 const STATUS_FILTERS = ["All", "Available", "In Use", "Maintenance"] as const;
@@ -59,6 +59,7 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                 <th className="px-4 py-3 font-medium">Hours Used</th>
                 <th className="px-4 py-3 font-medium">Next Maintenance</th>
                 <th className="px-4 py-3 font-medium">QR Tag</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -69,10 +70,7 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                     <td className="px-5 py-3 font-medium text-ink-800 whitespace-nowrap">{eq.name}</td>
                     <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{eq.type}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={eq.status === "Available" ? "success" : eq.status === "Maintenance" ? "danger" : "blue"}>
-                        {eq.status === "Maintenance" && <Wrench className="w-3 h-3" />}
-                        {eq.status}
-                      </Badge>
+                      <EquipmentStatusSelect equipmentId={eq.id} status={eq.status} />
                     </td>
                     <td className="px-4 py-3 text-ink-500 whitespace-nowrap">
                       <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{project ? <Link href={`/projects/${project.id}`} className="hover:text-blue-600 hover:underline">{project.name}</Link> : eq.location}</span>
@@ -80,6 +78,11 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                     <td className="px-4 py-3 text-ink-600">{eq.hoursUsed.toLocaleString()} hrs</td>
                     <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{formatDate(eq.nextMaintenance)}</td>
                     <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{eq.qrCode}</span></td>
+                    <td className="px-4 py-3">
+                      <Link href={`/equipment/${eq.id}/edit`} className="flex items-center gap-1 text-ink-400 hover:text-blue-600 transition-colors">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}

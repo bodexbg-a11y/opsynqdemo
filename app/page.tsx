@@ -108,7 +108,7 @@ export default function DashboardPage() {
       {/* Bottom row: AI insights, deadlines, tasks */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         <Card className="xl:col-span-1 bg-gradient-to-br from-navy-900 to-navy-800 border-navy-800 text-white overflow-hidden relative">
-          <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl" />
+          <div className="pointer-events-none absolute -right-10 -top-10 w-40 h-40 bg-blue-500/20 rounded-full blur-3xl" />
           <div className="flex items-center justify-between px-5 pt-5">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-blue-300" />

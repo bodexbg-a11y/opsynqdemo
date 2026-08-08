@@ -6,8 +6,19 @@ import ExcelJS from "exceljs";
 import { getStore } from "./data/store";
 import { nextEntityId } from "./data/ids";
 import { normalizeHeader, pick, cellToString, parseNumber, parseDateOrDefault, matchEnum } from "./data/import-helpers";
-import { PROJECT_CATEGORIES, PROJECT_STATUSES, RISK_LEVELS, TEAM_SPECIALTIES, TEAM_STATUSES, CLIENT_STATUSES } from "./data/constants";
-import type { Project, Team, Client, Milestone, ActivityItem } from "./data/types";
+import {
+  PROJECT_CATEGORIES,
+  PROJECT_STATUSES,
+  RISK_LEVELS,
+  TEAM_SPECIALTIES,
+  TEAM_STATUSES,
+  CLIENT_STATUSES,
+  TASK_PRIORITIES,
+  EQUIPMENT_TYPES,
+  EQUIPMENT_STATUSES,
+  MATERIAL_CATEGORIES,
+} from "./data/constants";
+import type { Project, Team, Client, Milestone, ActivityItem, Task, Equipment, Material } from "./data/types";
 import type { Store } from "./data/generate";
 
 function resolveOrCreateClient(store: Store, name: string): string {
@@ -368,4 +379,255 @@ export async function importProjectsAction(formData: FormData) {
   revalidatePath("/clients");
   revalidatePath("/");
   redirect(`/import?type=projects&imported=${imported}&skipped=${skipped}`);
+}
+
+function logActivity(project: Project, action: string) {
+  project.activity.unshift({
+    id: `${project.id}-AC${project.activity.length}-${Date.now()}`,
+    actor: "You",
+    action,
+    date: new Date().toISOString(),
+  });
+}
+
+export async function updateProjectStatusAction(formData: FormData) {
+  const store = getStore();
+  const projectId = String(formData.get("projectId") || "");
+  const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
+  const project = store.projects.find((p) => p.id === projectId);
+  if (project) {
+    project.status = status;
+    if (status === "Completed") project.progress = 100;
+    logActivity(project, `changed the project status to ${status}`);
+  }
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath("/");
+}
+
+export async function updateProjectAction(formData: FormData) {
+  const store = getStore();
+  const projectId = String(formData.get("projectId") || "");
+  const project = store.projects.find((p) => p.id === projectId);
+  if (!project) {
+    redirect("/projects");
+  }
+
+  project.name = String(formData.get("name") || "").trim() || project.name;
+  project.category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, project.category);
+  project.status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, project.status);
+  project.riskLevel = matchEnum(String(formData.get("riskLevel") || ""), RISK_LEVELS, project.riskLevel);
+  project.address = String(formData.get("address") || "").trim();
+  project.city = String(formData.get("city") || "").trim();
+  project.state = String(formData.get("state") || "").trim();
+  project.budget = parseNumber(String(formData.get("budget") || ""), project.budget);
+  project.description = String(formData.get("description") || "").trim() || project.description;
+
+  project.startDate = parseDateOrDefault(String(formData.get("startDate") || ""), new Date(project.startDate)).toISOString();
+  project.deadline = parseDateOrDefault(String(formData.get("deadline") || ""), new Date(project.deadline)).toISOString();
+
+  const clientName = String(formData.get("clientName") || "");
+  if (clientName.trim()) project.clientId = resolveOrCreateClient(store, clientName);
+
+  const requestedPmId = String(formData.get("projectManagerId") || "");
+  if (store.employees.some((e) => e.id === requestedPmId)) project.projectManagerId = requestedPmId;
+
+  const teamIds = formData.getAll("teamIds").map(String).filter((id) => store.teams.some((t) => t.id === id));
+  project.teamIds = teamIds;
+  teamIds.forEach((tid) => {
+    const team = store.teams.find((t) => t.id === tid);
+    if (team && !team.currentProjectId) team.currentProjectId = project.id;
+  });
+
+  if (project.status === "Completed") project.progress = 100;
+
+  logActivity(project, "updated the project details");
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath("/");
+  redirect(`/projects/${projectId}`);
+}
+
+export async function addProjectPhotosAction(formData: FormData) {
+  const store = getStore();
+  const projectId = String(formData.get("projectId") || "");
+  const project = store.projects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  const files = formData.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
+  let added = 0;
+  for (const file of files) {
+    if (file.size > 8 * 1024 * 1024) continue; // skip anything over 8MB to keep in-memory store lean
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const mime = file.type || "image/jpeg";
+    project.photos.push(`data:${mime};base64,${buffer.toString("base64")}`);
+    added++;
+  }
+
+  if (added > 0) {
+    logActivity(project, `uploaded ${added} new site photo${added === 1 ? "" : "s"}`);
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function addProjectTaskAction(formData: FormData) {
+  const store = getStore();
+  const projectId = String(formData.get("projectId") || "");
+  const project = store.projects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) return;
+
+  const priority = matchEnum(String(formData.get("priority") || ""), TASK_PRIORITIES, "Medium");
+  const dueDate = parseDateOrDefault(String(formData.get("dueDate") || ""), new Date(Date.now() + 14 * 86400000));
+  const assigneeIds = formData
+    .getAll("assigneeIds")
+    .map(String)
+    .filter((id) => store.employees.some((e) => e.id === id));
+
+  const id = nextEntityId("TSK", store.tasks);
+  const now = new Date();
+  const task: Task = {
+    id,
+    title,
+    description: String(formData.get("description") || "").trim(),
+    projectId,
+    status: "To Do",
+    priority,
+    assigneeIds,
+    dueDate: dueDate.toISOString(),
+    createdDate: now.toISOString(),
+    attachments: 0,
+    comments: 0,
+    tags: [],
+  };
+  store.tasks.push(task);
+  logActivity(project, `added a new task: "${title}"`);
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/tasks");
+}
+
+export async function createEquipmentAction(formData: FormData) {
+  const store = getStore();
+  const name = String(formData.get("name") || "").trim() || "New Equipment";
+  const type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, "Excavator");
+  const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
+  const location = String(formData.get("location") || "").trim() || "Main Equipment Yard";
+  const requestedProjectId = String(formData.get("currentProjectId") || "");
+  const currentProjectId = store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null;
+
+  const id = nextEntityId("EQP", store.equipment);
+  const suffix = id.split("-")[1].padStart(5, "0");
+  const now = new Date();
+
+  const equipment: Equipment = {
+    id,
+    name,
+    type,
+    status,
+    currentProjectId,
+    location,
+    lastMaintenance: now.toISOString(),
+    nextMaintenance: new Date(now.getTime() + 90 * 86400000).toISOString(),
+    qrCode: `QR-EQP-${suffix}`,
+    hoursUsed: 0,
+    purchaseDate: now.toISOString(),
+  };
+  store.equipment.push(equipment);
+
+  revalidatePath("/equipment");
+  redirect("/equipment");
+}
+
+export async function updateEquipmentAction(formData: FormData) {
+  const store = getStore();
+  const equipmentId = String(formData.get("equipmentId") || "");
+  const equipment = store.equipment.find((e) => e.id === equipmentId);
+  if (!equipment) {
+    redirect("/equipment");
+  }
+
+  equipment.name = String(formData.get("name") || "").trim() || equipment.name;
+  equipment.type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, equipment.type);
+  equipment.status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, equipment.status);
+  equipment.location = String(formData.get("location") || "").trim() || equipment.location;
+  equipment.hoursUsed = parseNumber(String(formData.get("hoursUsed") || ""), equipment.hoursUsed);
+  equipment.lastMaintenance = parseDateOrDefault(String(formData.get("lastMaintenance") || ""), new Date(equipment.lastMaintenance)).toISOString();
+  equipment.nextMaintenance = parseDateOrDefault(String(formData.get("nextMaintenance") || ""), new Date(equipment.nextMaintenance)).toISOString();
+
+  const requestedProjectId = String(formData.get("currentProjectId") || "");
+  equipment.currentProjectId = store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null;
+
+  revalidatePath("/equipment");
+  redirect("/equipment");
+}
+
+export async function updateEquipmentStatusAction(formData: FormData) {
+  const store = getStore();
+  const equipmentId = String(formData.get("equipmentId") || "");
+  const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
+  const equipment = store.equipment.find((e) => e.id === equipmentId);
+  if (equipment) equipment.status = status;
+  revalidatePath("/equipment");
+}
+
+export async function createMaterialAction(formData: FormData) {
+  const store = getStore();
+  const name = String(formData.get("name") || "").trim() || "New Material";
+  const category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, "Finishing");
+  const unit = String(formData.get("unit") || "").trim() || "unit";
+  const quantity = parseNumber(String(formData.get("quantity") || ""), 0);
+  const reorderLevel = parseNumber(String(formData.get("reorderLevel") || ""), 20);
+  const unitCost = parseNumber(String(formData.get("unitCost") || ""), 0);
+  const warehouseLocation = String(formData.get("warehouseLocation") || "").trim() || "Aisle 1 - Bin A1";
+  const requestedSupplierId = String(formData.get("supplierId") || "");
+  const supplierId = store.suppliers.some((s) => s.id === requestedSupplierId) ? requestedSupplierId : store.suppliers[0]?.id ?? "";
+
+  const id = nextEntityId("MAT", store.materials);
+  const suffix = id.split("-")[1].padStart(5, "0");
+
+  const material: Material = {
+    id,
+    name,
+    category,
+    sku: `SKU-${suffix}`,
+    quantity,
+    unit,
+    reorderLevel,
+    warehouseLocation,
+    supplierId,
+    unitCost,
+    qrCode: `QR-MAT-${suffix}`,
+  };
+  store.materials.push(material);
+
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
+}
+
+export async function updateMaterialAction(formData: FormData) {
+  const store = getStore();
+  const materialId = String(formData.get("materialId") || "");
+  const material = store.materials.find((m) => m.id === materialId);
+  if (!material) {
+    redirect("/warehouse");
+  }
+
+  material.name = String(formData.get("name") || "").trim() || material.name;
+  material.category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, material.category);
+  material.unit = String(formData.get("unit") || "").trim() || material.unit;
+  material.quantity = parseNumber(String(formData.get("quantity") || ""), material.quantity);
+  material.reorderLevel = parseNumber(String(formData.get("reorderLevel") || ""), material.reorderLevel);
+  material.unitCost = parseNumber(String(formData.get("unitCost") || ""), material.unitCost);
+  material.warehouseLocation = String(formData.get("warehouseLocation") || "").trim() || material.warehouseLocation;
+
+  const requestedSupplierId = String(formData.get("supplierId") || "");
+  if (store.suppliers.some((s) => s.id === requestedSupplierId)) material.supplierId = requestedSupplierId;
+
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
 }

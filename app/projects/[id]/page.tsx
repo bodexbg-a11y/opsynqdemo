@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import {
   MapPin,
@@ -6,20 +7,26 @@ import {
   Users,
   Sparkles,
   FileText,
-  Image as ImageIcon,
   Receipt,
   Activity as ActivityIcon,
   Wallet,
   ListChecks,
   Clock,
+  Pencil,
+  Upload,
+  Plus,
 } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { projectProfitability } from "@/lib/data/analytics";
-import { ProjectStatusBadge, RiskBadge, TaskStatusBadge, PriorityBadge, InvoiceStatusBadge } from "@/components/ui/badge";
+import { addProjectPhotosAction, addProjectTaskAction } from "@/lib/actions";
+import { TASK_PRIORITIES } from "@/lib/data/constants";
+import { RiskBadge, TaskStatusBadge, PriorityBadge, InvoiceStatusBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Tabs } from "@/components/ui/tabs";
+import { ProjectStatusSelect } from "@/components/modules/project-status-select";
+import { inputClass, selectClass } from "@/components/ui/form";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -37,18 +44,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const projectInvoices = invoices.filter((iv) => iv.projectId === project.id);
   const projectContracts = contracts.filter((c) => c.projectId === project.id);
   const { profit, margin } = projectProfitability(project);
-  const memberNames = projectTeams.flatMap((t) => employees.filter((e) => e.teamId === t.id).map((e) => e.name));
+  const crewEmployees = projectTeams.flatMap((t) => employees.filter((e) => e.teamId === t.id));
+  const memberNames = crewEmployees.map((e) => e.name);
 
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
       <Card className="p-6 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-64 h-64 bg-blue-500/[0.04] rounded-full blur-3xl -mr-20 -mt-20" />
+        <div className="pointer-events-none absolute right-0 top-0 w-64 h-64 bg-blue-500/[0.04] rounded-full blur-3xl -mr-20 -mt-20" />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-[20px] font-semibold text-ink-900 tracking-tight">{project.name}</h1>
-              <ProjectStatusBadge status={project.status} />
+              <ProjectStatusSelect projectId={project.id} status={project.status} />
               <RiskBadge risk={project.riskLevel} />
             </div>
             <div className="flex items-center gap-4 mt-2 text-[13px] text-ink-500 flex-wrap">
@@ -67,6 +75,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </div>
               </div>
             )}
+            <Link
+              href={`/projects/${project.id}/edit`}
+              className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </Link>
           </div>
         </div>
 
@@ -164,40 +179,88 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           {
             label: "Gallery",
             content: (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {project.photos.map((src, i) => (
-                  <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden bg-ink-100">
-                    <Image src={src} alt={`Site photo ${i + 1}`} fill sizes="300px" className="object-cover" unoptimized />
-                  </div>
-                ))}
+              <div className="space-y-4">
+                <form action={addProjectPhotosAction} className="flex flex-wrap items-center gap-3">
+                  <input type="hidden" name="projectId" value={project.id} />
+                  <input
+                    type="file"
+                    name="photos"
+                    accept="image/*"
+                    multiple
+                    className="text-[12.5px] text-ink-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                  />
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[12.5px] font-medium px-3.5 py-2 rounded-lg transition-colors shrink-0"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Photos
+                  </button>
+                </form>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {project.photos.map((src, i) => (
+                    <div key={i} className="relative aspect-[4/3] rounded-xl overflow-hidden bg-ink-100">
+                      <Image src={src} alt={`Site photo ${i + 1}`} fill sizes="300px" className="object-cover" unoptimized />
+                    </div>
+                  ))}
+                  {project.photos.length === 0 && (
+                    <p className="col-span-full text-center text-ink-400 text-[13px] py-10">No photos uploaded yet.</p>
+                  )}
+                </div>
               </div>
             ),
           },
           {
+            id: "tasks",
             label: `Tasks (${projectTasks.length})`,
             content: (
-              <Card className="overflow-hidden">
-                <div className="divide-y divide-ink-50">
-                  {projectTasks.slice(0, 30).map((t) => {
-                    const assignees = employees.filter((e) => t.assigneeIds.includes(e.id)).map((e) => e.name);
-                    return (
-                      <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-ink-50/60 transition-colors">
-                        <ListChecks className="w-4 h-4 text-ink-300 shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] font-medium text-ink-800 truncate">{t.title}</p>
-                          <p className="text-[11.5px] text-ink-400">Due {formatDate(t.dueDate)}</p>
+              <div className="space-y-4">
+                <Card className="p-4">
+                  <form action={addProjectTaskAction} className="grid grid-cols-1 sm:grid-cols-[1fr_140px_150px_auto] gap-2.5">
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <input name="title" required placeholder="Add a task for this project…" className={inputClass} />
+                    <select name="priority" defaultValue="Medium" className={selectClass}>
+                      {TASK_PRIORITIES.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                    <input type="date" name="dueDate" className={inputClass} />
+                    <button
+                      type="submit"
+                      className="flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[12.5px] font-medium px-4 py-2 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add
+                    </button>
+                  </form>
+                </Card>
+                <Card className="overflow-hidden">
+                  <div className="divide-y divide-ink-50">
+                    {projectTasks.slice(0, 30).map((t) => {
+                      const assignees = employees.filter((e) => t.assigneeIds.includes(e.id)).map((e) => e.name);
+                      return (
+                        <div key={t.id} className="flex items-center gap-3 px-5 py-3 hover:bg-ink-50/60 transition-colors">
+                          <ListChecks className="w-4 h-4 text-ink-300 shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[13px] font-medium text-ink-800 truncate">{t.title}</p>
+                            <p className="text-[11.5px] text-ink-400">Due {formatDate(t.dueDate)}</p>
+                          </div>
+                          <AvatarStack names={assignees} max={2} />
+                          <PriorityBadge priority={t.priority} />
+                          <TaskStatusBadge status={t.status} />
                         </div>
-                        <AvatarStack names={assignees} max={2} />
-                        <PriorityBadge priority={t.priority} />
-                        <TaskStatusBadge status={t.status} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
+                      );
+                    })}
+                    {projectTasks.length === 0 && <p className="p-6 text-center text-ink-400 text-[13px]">No tasks yet — add the first one above.</p>}
+                  </div>
+                </Card>
+              </div>
             ),
           },
           {
+            id: "documents",
             label: `Documents (${projectDocs.length})`,
             content: (
               <Card className="overflow-hidden">
