@@ -6,10 +6,11 @@ import { TeamProductivityChart } from "@/components/charts/team-productivity-cha
 import { Building2, Wallet, HardHat, Truck, FileBarChart, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
-export default function ReportsPage() {
-  const { projects, teams, equipment, employees } = getStore();
-  const statusDist = getProjectStatusDistribution();
-  const teamProductivity = getTeamProductivity();
+export default async function ReportsPage() {
+  const store = await getStore();
+  const { projects, teams, equipment, employees } = store;
+  const statusDist = getProjectStatusDistribution(store);
+  const teamProductivity = getTeamProductivity(store);
   const totalBudget = projects.reduce((s, p) => s + p.budget, 0);
   const totalProfit = projects.reduce((s, p) => s + projectProfitability(p).profit, 0);
   const maintenanceEquip = equipment.filter((e) => e.status === "Maintenance").length;

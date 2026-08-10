@@ -31,7 +31,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { projects, clients, employees, teams, tasks, documents, invoices, contracts } = getStore();
+  const store = await getStore();
+  const { projects, clients, employees, teams, tasks, documents, invoices, contracts } = store;
 
   const project = projects.find((p) => p.id === id);
   if (!project) notFound();

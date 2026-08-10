@@ -15,8 +15,8 @@ export const metadata: Metadata = {
   description: "The complete Business Operating System for construction companies.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  const { notifications } = getStore();
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const { notifications } = await getStore();
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (

@@ -36,17 +36,18 @@ import { SeverityDot } from "@/components/ui/severity-dot";
 import { AvatarStack } from "@/components/ui/avatar";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-export default function DashboardPage() {
-  const { employees, projects } = getStore();
-  const kpis = getKpis();
-  const revenue = getRevenueSeries();
-  const cashFlow = getCashFlowSeries();
-  const statusDist = getProjectStatusDistribution();
-  const progressData = getProjectProgressData();
-  const teamProductivity = getTeamProductivity();
-  const deadlines = getUpcomingDeadlines(5);
-  const todaysTasks = getTodaysTasks(6);
-  const insights = getAiInsights();
+export default async function DashboardPage() {
+  const store = await getStore();
+  const { employees, projects } = store;
+  const kpis = getKpis(store);
+  const revenue = getRevenueSeries(store);
+  const cashFlow = getCashFlowSeries(store);
+  const statusDist = getProjectStatusDistribution(store);
+  const progressData = getProjectProgressData(store);
+  const teamProductivity = getTeamProductivity(store);
+  const deadlines = getUpcomingDeadlines(store, 5);
+  const todaysTasks = getTodaysTasks(store, 6);
+  const insights = getAiInsights(store);
 
   return (
     <div className="space-y-6 pb-10">

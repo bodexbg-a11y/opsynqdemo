@@ -10,14 +10,15 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { clients, projects, invoices, contracts } = getStore();
+  const store = await getStore();
+  const { clients, projects, invoices, contracts } = store;
   const client = clients.find((c) => c.id === id);
   if (!client) notFound();
 
   const clientProjects = projects.filter((p) => p.clientId === client.id);
   const clientInvoices = invoices.filter((iv) => iv.clientId === client.id);
   const clientContracts = contracts.filter((c) => c.clientId === client.id);
-  const stats = getClientStats(client.id);
+  const stats = getClientStats(store, client.id);
 
   return (
     <div className="space-y-6 pb-10">

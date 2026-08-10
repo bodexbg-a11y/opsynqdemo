@@ -8,7 +8,7 @@ import { ProjectForm } from "@/components/modules/project-form";
 
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { projects, employees, teams, clients } = getStore();
+  const { projects, employees, teams, clients } = await getStore();
   const project = projects.find((p) => p.id === id);
   if (!project) notFound();
 

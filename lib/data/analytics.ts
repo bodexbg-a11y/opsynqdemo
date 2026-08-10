@@ -1,15 +1,15 @@
-import { getStore } from "./store";
+import type { Store } from "./generate";
 import type { Project, Task, AdPlatform } from "./types";
 
 const NOW = new Date("2026-08-07");
 
-export function getKpis() {
-  const { projects, invoices, tasks, teams } = getStore();
+export function getKpis(store: Store) {
+  const { projects, invoices, tasks, teams } = store;
 
   const activeProjects = projects.filter((p) => p.status === "In Progress" || p.status === "Behind Schedule");
   const behindSchedule = projects.filter((p) => p.status === "Behind Schedule");
   const revenue = invoices.filter((i) => i.status === "Paid").reduce((sum, i) => sum + i.amount, 0);
-  const cashFlow = getCashFlowSeries();
+  const cashFlow = getCashFlowSeries(store);
   const profit = cashFlow.reduce((sum, m) => sum + (m.inflow - m.outflow), 0);
   const outstanding = invoices
     .filter((i) => i.status === "Overdue" || i.status === "Pending")
@@ -33,8 +33,8 @@ export function getKpis() {
   };
 }
 
-export function getRevenueSeries() {
-  const { invoices } = getStore();
+export function getRevenueSeries(store: Store) {
+  const { invoices } = store;
   const months = ["Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
   const monthIdxBase = 1; // Feb = index 1
   return months.map((m, idx) => {
@@ -54,8 +54,8 @@ export function getRevenueSeries() {
   });
 }
 
-export function getCashFlowSeries() {
-  const revenueSeries = getRevenueSeries();
+export function getCashFlowSeries(store: Store) {
+  const revenueSeries = getRevenueSeries(store);
   let running = 420000;
   return revenueSeries.map((r, idx) => {
     const expenses = r.revenue * (0.62 + (idx % 3) * 0.03);
@@ -69,8 +69,8 @@ export function getCashFlowSeries() {
   });
 }
 
-export function getProjectStatusDistribution() {
-  const { projects } = getStore();
+export function getProjectStatusDistribution(store: Store) {
+  const { projects } = store;
   const statuses: Project["status"][] = ["In Progress", "Behind Schedule", "Planning", "On Hold", "Completed"];
   return statuses.map((status) => ({
     status,
@@ -78,8 +78,8 @@ export function getProjectStatusDistribution() {
   }));
 }
 
-export function getProjectProgressData() {
-  const { projects } = getStore();
+export function getProjectProgressData(store: Store) {
+  const { projects } = store;
   return projects
     .filter((p) => p.status === "In Progress" || p.status === "Behind Schedule")
     .sort((a, b) => a.progress - b.progress)
@@ -87,24 +87,24 @@ export function getProjectProgressData() {
     .map((p) => ({ name: p.name.length > 18 ? p.name.slice(0, 18) + "…" : p.name, progress: p.progress, status: p.status }));
 }
 
-export function getTeamProductivity() {
-  const { teams } = getStore();
+export function getTeamProductivity(store: Store) {
+  const { teams } = store;
   return [...teams]
     .sort((a, b) => b.performanceScore - a.performanceScore)
     .slice(0, 8)
     .map((t) => ({ name: t.name.replace("Crew ", ""), score: t.performanceScore, hours: t.avgWeeklyHours }));
 }
 
-export function getUpcomingDeadlines(limit = 6) {
-  const { projects } = getStore();
+export function getUpcomingDeadlines(store: Store, limit = 6) {
+  const { projects } = store;
   return [...projects]
     .filter((p) => p.status !== "Completed" && new Date(p.deadline) > NOW)
     .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
     .slice(0, limit);
 }
 
-export function getTodaysTasks(limit = 8) {
-  const { tasks } = getStore();
+export function getTodaysTasks(store: Store, limit = 8) {
+  const { tasks } = store;
   const upcoming = [...tasks]
     .filter((t) => t.status !== "Completed")
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
@@ -117,8 +117,8 @@ export function projectProfitability(p: Project) {
   return { profit, margin };
 }
 
-export function getAiInsights() {
-  const { projects, invoices, teams } = getStore();
+export function getAiInsights(store: Store) {
+  const { projects, invoices, teams } = store;
   const insights: { title: string; body: string; severity: "info" | "warning" | "critical" }[] = [];
 
   const losingMoney = projects.filter((p) => {
@@ -170,37 +170,37 @@ export function getAiInsights() {
   return insights;
 }
 
-export function findLosingProjects() {
-  const { projects } = getStore();
+export function findLosingProjects(store: Store) {
+  const { projects } = store;
   return projects
     .map((p) => ({ p, ...projectProfitability(p) }))
     .filter((x) => x.profit < 0)
     .sort((a, b) => a.profit - b.profit);
 }
 
-export function findAtRiskProjects() {
-  const { projects } = getStore();
+export function findAtRiskProjects(store: Store) {
+  const { projects } = store;
   return projects.filter((p) => p.status === "Behind Schedule" || p.riskLevel === "High");
 }
 
-export function rankTeamsByPerformance() {
-  const { teams } = getStore();
+export function rankTeamsByPerformance(store: Store) {
+  const { teams } = store;
   return [...teams].sort((a, b) => b.performanceScore - a.performanceScore);
 }
 
-export function findOverdueInvoices() {
-  const { invoices } = getStore();
+export function findOverdueInvoices(store: Store) {
+  const { invoices } = store;
   return invoices.filter((i) => i.status === "Overdue").sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 }
 
-export function getTaskCountsByStatus() {
-  const { tasks } = getStore();
+export function getTaskCountsByStatus(store: Store) {
+  const { tasks } = store;
   const statuses: Task["status"][] = ["To Do", "In Progress", "Blocked", "Completed"];
   return statuses.map((status) => ({ status, count: tasks.filter((t) => t.status === status).length }));
 }
 
-export function getCampaignKpis() {
-  const { adCampaigns } = getStore();
+export function getCampaignKpis(store: Store) {
+  const { adCampaigns } = store;
   const active = adCampaigns.filter((c) => c.status === "Active");
   const totalSpend = adCampaigns.reduce((s, c) => s + c.spend, 0);
   const totalLeads = adCampaigns.reduce((s, c) => s + c.leads, 0);
@@ -216,8 +216,8 @@ export function getCampaignKpis() {
   };
 }
 
-export function getCampaignSpendByPlatform() {
-  const { adCampaigns } = getStore();
+export function getCampaignSpendByPlatform(store: Store) {
+  const { adCampaigns } = store;
   const platforms: AdPlatform[] = ["Facebook", "Google"];
   return platforms.map((platform) => {
     const items = adCampaigns.filter((c) => c.platform === platform);
@@ -230,9 +230,9 @@ export function getCampaignSpendByPlatform() {
   });
 }
 
-export function getCampaignSpendSeries() {
+export function getCampaignSpendSeries(store: Store) {
   const months = ["Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
-  const { adCampaigns } = getStore();
+  const { adCampaigns } = store;
   const totalSpend = adCampaigns.reduce((s, c) => s + c.spend, 0) || 1;
   return months.map((month, idx) => {
     const weight = 0.7 + Math.sin(idx / 2) * 0.25 + idx * 0.05;
@@ -244,13 +244,13 @@ export function getCampaignSpendSeries() {
   });
 }
 
-export function rankCampaignsByRoas() {
-  const { adCampaigns } = getStore();
+export function rankCampaignsByRoas(store: Store) {
+  const { adCampaigns } = store;
   return [...adCampaigns].sort((a, b) => b.roas - a.roas);
 }
 
-export function findUnderperformingCampaigns() {
-  const { adCampaigns } = getStore();
+export function findUnderperformingCampaigns(store: Store) {
+  const { adCampaigns } = store;
   return adCampaigns.filter((c) => c.status === "Active" && c.roas < 1.5).sort((a, b) => a.roas - b.roas);
 }
 
@@ -262,8 +262,8 @@ export interface ClientStats {
 
 /** Computed live from current projects/invoices so newly created or imported
  * records are always reflected, instead of trusting a stored snapshot field. */
-export function getAllClientStats(): Map<string, ClientStats> {
-  const { projects, invoices } = getStore();
+export function getAllClientStats(store: Store): Map<string, ClientStats> {
+  const { projects, invoices } = store;
   const stats = new Map<string, ClientStats>();
   const ensure = (clientId: string) => {
     let s = stats.get(clientId);
@@ -284,6 +284,6 @@ export function getAllClientStats(): Map<string, ClientStats> {
   return stats;
 }
 
-export function getClientStats(clientId: string): ClientStats {
-  return getAllClientStats().get(clientId) ?? { totalProjects: 0, totalInvoiced: 0, outstandingBalance: 0 };
+export function getClientStats(store: Store, clientId: string): ClientStats {
+  return getAllClientStats(store).get(clientId) ?? { totalProjects: 0, totalInvoiced: 0, outstandingBalance: 0 };
 }

@@ -7,8 +7,8 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { QrCode, Star, Plus, Pencil } from "lucide-react";
 
-export default function WarehousePage() {
-  const { materials, suppliers, purchaseOrders } = getStore();
+export default async function WarehousePage() {
+  const { materials, suppliers, purchaseOrders } = await getStore();
   const lowStock = materials.filter((m) => m.quantity < m.reorderLevel);
 
   return (

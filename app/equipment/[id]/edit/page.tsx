@@ -8,7 +8,7 @@ import { EquipmentForm } from "@/components/modules/equipment-form";
 
 export default async function EditEquipmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { equipment, projects } = getStore();
+  const { equipment, projects } = await getStore();
   const item = equipment.find((e) => e.id === id);
   if (!item) notFound();
 

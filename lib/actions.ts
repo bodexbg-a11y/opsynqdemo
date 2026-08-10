@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import ExcelJS from "exceljs";
 import { getStore } from "./data/store";
 import { nextEntityId } from "./data/ids";
+import { addEntity, patchEntity, writeOverlay, type Overlay } from "./data/overlay";
 import { normalizeHeader, pick, cellToString, parseNumber, parseDateOrDefault, matchEnum } from "./data/import-helpers";
 import {
   PROJECT_CATEGORIES,
@@ -19,16 +20,18 @@ import {
   MATERIAL_CATEGORIES,
 } from "./data/constants";
 import type { Project, Team, Client, Milestone, ActivityItem, Task, Equipment, Material } from "./data/types";
-import type { Store } from "./data/generate";
 
-function resolveOrCreateClient(store: Store, name: string): string {
+/** Finds a client by name in `clientsPool`, or creates one and records it in the overlay.
+ *  `clientsPool` is mutated locally so repeated calls within the same action (e.g. an Excel
+ *  import loop) see clients created earlier in that same batch instead of colliding on IDs. */
+function resolveOrCreateClient(clientsPool: Client[], overlay: Overlay, name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return store.clients[0]?.id ?? "";
-  const existing = store.clients.find((c) => c.company.toLowerCase() === trimmed.toLowerCase());
+  if (!trimmed) return clientsPool[0]?.id ?? "";
+  const existing = clientsPool.find((c) => c.company.toLowerCase() === trimmed.toLowerCase());
   if (existing) return existing.id;
 
   const newClient: Client = {
-    id: nextEntityId("CT", store.clients),
+    id: nextEntityId("CT", clientsPool),
     company: trimmed,
     industry: "General Contracting",
     contacts: [],
@@ -42,7 +45,8 @@ function resolveOrCreateClient(store: Store, name: string): string {
     outstandingBalance: 0,
     communications: [],
   };
-  store.clients.push(newClient);
+  clientsPool.push(newClient);
+  addEntity(overlay, "client", newClient);
   return newClient.id;
 }
 
@@ -66,8 +70,16 @@ function buildDefaultMilestones(projectId: string, startDate: Date, deadline: Da
   }));
 }
 
+/** Returns the `activity` field for a patch: the project's current feed with one new entry prepended. */
+function withActivity(project: Project, action: string): ActivityItem[] {
+  return [
+    { id: `${project.id}-AC${project.activity.length}-${Date.now()}`, actor: "You", action, date: new Date().toISOString() },
+    ...project.activity,
+  ];
+}
+
 export async function createProjectAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
 
   const name = String(formData.get("name") || "").trim() || "Untitled Project";
   const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, "Residential");
@@ -86,7 +98,7 @@ export async function createProjectAction(formData: FormData) {
     new Date(startDate.getTime() + 180 * 86400000)
   );
 
-  const clientId = resolveOrCreateClient(store, String(formData.get("clientName") || ""));
+  const clientName = String(formData.get("clientName") || "");
 
   const requestedPmId = String(formData.get("projectManagerId") || "");
   const projectManagerId = store.employees.some((e) => e.id === requestedPmId) ? requestedPmId : store.employees[0]?.id ?? "";
@@ -98,36 +110,40 @@ export async function createProjectAction(formData: FormData) {
     { id: `${id}-AC0`, actor: "You", action: "created this project", date: now.toISOString() },
   ];
 
-  const project: Project = {
-    id,
-    name,
-    category,
-    clientId,
-    address,
-    city,
-    state,
-    status,
-    riskLevel,
-    budget,
-    spent: 0,
-    invoicedToDate: 0,
-    startDate: startDate.toISOString(),
-    deadline: deadline.toISOString(),
-    progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
-    teamIds,
-    projectManagerId,
-    photos: [],
-    filesCount: 0,
-    milestones: buildDefaultMilestones(id, startDate, deadline),
-    comments: [],
-    activity,
-    description,
-  };
+  await writeOverlay((overlay) => {
+    const clientId = resolveOrCreateClient([...store.clients], overlay, clientName);
 
-  store.projects.push(project);
-  teamIds.forEach((tid) => {
-    const team = store.teams.find((t) => t.id === tid);
-    if (team && !team.currentProjectId) team.currentProjectId = project.id;
+    const project: Project = {
+      id,
+      name,
+      category,
+      clientId,
+      address,
+      city,
+      state,
+      status,
+      riskLevel,
+      budget,
+      spent: 0,
+      invoicedToDate: 0,
+      startDate: startDate.toISOString(),
+      deadline: deadline.toISOString(),
+      progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
+      teamIds,
+      projectManagerId,
+      photos: [],
+      filesCount: 0,
+      milestones: buildDefaultMilestones(id, startDate, deadline),
+      comments: [],
+      activity,
+      description,
+    };
+    addEntity(overlay, "project", project);
+
+    teamIds.forEach((tid) => {
+      const team = store.teams.find((t) => t.id === tid);
+      if (team && !team.currentProjectId) patchEntity(overlay, "team", tid, { currentProjectId: id });
+    });
   });
 
   revalidatePath("/projects");
@@ -136,7 +152,7 @@ export async function createProjectAction(formData: FormData) {
 }
 
 export async function createTeamAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
 
   const specialty = matchEnum(String(formData.get("specialty") || ""), TEAM_SPECIALTIES, "General Labor");
   const status = matchEnum(String(formData.get("status") || ""), TEAM_STATUSES, "Available");
@@ -167,13 +183,10 @@ export async function createTeamAction(formData: FormData) {
     status,
   };
 
-  store.teams.push(team);
-
-  const foreman = store.employees.find((e) => e.id === foremanId);
-  if (foreman) foreman.teamId = team.id;
-  memberIds.forEach((mid) => {
-    const emp = store.employees.find((e) => e.id === mid);
-    if (emp) emp.teamId = team.id;
+  await writeOverlay((overlay) => {
+    addEntity(overlay, "team", team);
+    patchEntity(overlay, "employee", foremanId, { teamId: team.id });
+    memberIds.forEach((mid) => patchEntity(overlay, "employee", mid, { teamId: team.id }));
   });
 
   revalidatePath("/teams");
@@ -181,11 +194,11 @@ export async function createTeamAction(formData: FormData) {
 }
 
 export async function updateClientStatusAction(formData: FormData) {
-  const store = getStore();
   const clientId = String(formData.get("clientId") || "");
   const status = matchEnum(String(formData.get("status") || ""), CLIENT_STATUSES, "Lead");
-  const client = store.clients.find((c) => c.id === clientId);
-  if (client) client.status = status;
+  await writeOverlay((overlay) => {
+    patchEntity(overlay, "client", clientId, { status });
+  });
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
 }
@@ -259,52 +272,56 @@ export async function importClientsAction(formData: FormData) {
     redirect("/import?type=clients&error=nofile");
   }
 
-  const store = getStore();
+  const store = await getStore();
   const { headerMap, rows } = await loadWorksheetRows(file as File);
+  const clientsPool = [...store.clients];
 
   let imported = 0;
   let skipped = 0;
 
-  for (const row of rows) {
-    const company = pick(row, headerMap, CLIENT_ALIASES.company);
-    if (!company) {
-      skipped++;
-      continue;
-    }
-    const contactName = pick(row, headerMap, CLIENT_ALIASES.contactName);
-    const contactEmail = pick(row, headerMap, CLIENT_ALIASES.contactEmail);
-    const contactPhone = pick(row, headerMap, CLIENT_ALIASES.contactPhone);
+  await writeOverlay((overlay) => {
+    for (const row of rows) {
+      const company = pick(row, headerMap, CLIENT_ALIASES.company);
+      if (!company) {
+        skipped++;
+        continue;
+      }
+      const contactName = pick(row, headerMap, CLIENT_ALIASES.contactName);
+      const contactEmail = pick(row, headerMap, CLIENT_ALIASES.contactEmail);
+      const contactPhone = pick(row, headerMap, CLIENT_ALIASES.contactPhone);
 
-    const id = nextEntityId("CT", store.clients);
-    const client: Client = {
-      id,
-      company,
-      industry: pick(row, headerMap, CLIENT_ALIASES.industry) || "General Contracting",
-      contacts:
-        contactName || contactEmail || contactPhone
-          ? [
-              {
-                id: `${id}-C0`,
-                name: contactName || "Primary Contact",
-                title: "Contact",
-                email: contactEmail,
-                phone: contactPhone,
-              },
-            ]
-          : [],
-      address: pick(row, headerMap, CLIENT_ALIASES.address),
-      city: pick(row, headerMap, CLIENT_ALIASES.city),
-      state: pick(row, headerMap, CLIENT_ALIASES.state),
-      status: matchEnum(pick(row, headerMap, CLIENT_ALIASES.status), CLIENT_STATUSES, "Lead"),
-      since: new Date().toISOString(),
-      totalProjects: 0,
-      totalInvoiced: 0,
-      outstandingBalance: 0,
-      communications: [],
-    };
-    store.clients.push(client);
-    imported++;
-  }
+      const id = nextEntityId("CT", clientsPool);
+      const client: Client = {
+        id,
+        company,
+        industry: pick(row, headerMap, CLIENT_ALIASES.industry) || "General Contracting",
+        contacts:
+          contactName || contactEmail || contactPhone
+            ? [
+                {
+                  id: `${id}-C0`,
+                  name: contactName || "Primary Contact",
+                  title: "Contact",
+                  email: contactEmail,
+                  phone: contactPhone,
+                },
+              ]
+            : [],
+        address: pick(row, headerMap, CLIENT_ALIASES.address),
+        city: pick(row, headerMap, CLIENT_ALIASES.city),
+        state: pick(row, headerMap, CLIENT_ALIASES.state),
+        status: matchEnum(pick(row, headerMap, CLIENT_ALIASES.status), CLIENT_STATUSES, "Lead"),
+        since: new Date().toISOString(),
+        totalProjects: 0,
+        totalInvoiced: 0,
+        outstandingBalance: 0,
+        communications: [],
+      };
+      clientsPool.push(client);
+      addEntity(overlay, "client", client);
+      imported++;
+    }
+  });
 
   revalidatePath("/clients");
   redirect(`/import?type=clients&imported=${imported}&skipped=${skipped}`);
@@ -316,64 +333,69 @@ export async function importProjectsAction(formData: FormData) {
     redirect("/import?type=projects&error=nofile");
   }
 
-  const store = getStore();
+  const store = await getStore();
   const { headerMap, rows } = await loadWorksheetRows(file as File);
+  const clientsPool = [...store.clients];
+  const projectsPool = [...store.projects];
 
   let imported = 0;
   let skipped = 0;
 
-  for (const row of rows) {
-    const name = pick(row, headerMap, PROJECT_ALIASES.name);
-    const clientName = pick(row, headerMap, PROJECT_ALIASES.client);
-    if (!name && !clientName) {
-      skipped++;
-      continue;
+  await writeOverlay((overlay) => {
+    for (const row of rows) {
+      const name = pick(row, headerMap, PROJECT_ALIASES.name);
+      const clientName = pick(row, headerMap, PROJECT_ALIASES.client);
+      if (!name && !clientName) {
+        skipped++;
+        continue;
+      }
+
+      const clientId = resolveOrCreateClient(clientsPool, overlay, clientName);
+      if (!clientId) {
+        skipped++;
+        continue;
+      }
+
+      const now = new Date();
+      const startDate = parseDateOrDefault(pick(row, headerMap, PROJECT_ALIASES.startDate), now);
+      const deadline = parseDateOrDefault(
+        pick(row, headerMap, PROJECT_ALIASES.deadline),
+        new Date(startDate.getTime() + 180 * 86400000)
+      );
+      const status = matchEnum(pick(row, headerMap, PROJECT_ALIASES.status), PROJECT_STATUSES, "Planning");
+      const id = nextEntityId("PRJ", projectsPool);
+
+      const project: Project = {
+        id,
+        name: name || `${clientName} Project`,
+        category: matchEnum(pick(row, headerMap, PROJECT_ALIASES.category), PROJECT_CATEGORIES, "Residential"),
+        clientId,
+        address: pick(row, headerMap, PROJECT_ALIASES.address),
+        city: pick(row, headerMap, PROJECT_ALIASES.city),
+        state: pick(row, headerMap, PROJECT_ALIASES.state),
+        status,
+        riskLevel: matchEnum(pick(row, headerMap, PROJECT_ALIASES.riskLevel), RISK_LEVELS, "Medium"),
+        budget: parseNumber(pick(row, headerMap, PROJECT_ALIASES.budget), 0),
+        spent: 0,
+        invoicedToDate: 0,
+        startDate: startDate.toISOString(),
+        deadline: deadline.toISOString(),
+        progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
+        teamIds: [],
+        projectManagerId: store.employees[0]?.id ?? "",
+        photos: [],
+        filesCount: 0,
+        milestones: buildDefaultMilestones(id, startDate, deadline),
+        comments: [],
+        activity: [{ id: `${id}-AC0`, actor: "System", action: "imported this project from a spreadsheet", date: now.toISOString() }],
+        description: pick(row, headerMap, PROJECT_ALIASES.description) || "Imported via Excel.",
+      };
+
+      projectsPool.push(project);
+      addEntity(overlay, "project", project);
+      imported++;
     }
-
-    const clientId = resolveOrCreateClient(store, clientName);
-    if (!clientId) {
-      skipped++;
-      continue;
-    }
-
-    const now = new Date();
-    const startDate = parseDateOrDefault(pick(row, headerMap, PROJECT_ALIASES.startDate), now);
-    const deadline = parseDateOrDefault(
-      pick(row, headerMap, PROJECT_ALIASES.deadline),
-      new Date(startDate.getTime() + 180 * 86400000)
-    );
-    const status = matchEnum(pick(row, headerMap, PROJECT_ALIASES.status), PROJECT_STATUSES, "Planning");
-    const id = nextEntityId("PRJ", store.projects);
-
-    const project: Project = {
-      id,
-      name: name || `${clientName} Project`,
-      category: matchEnum(pick(row, headerMap, PROJECT_ALIASES.category), PROJECT_CATEGORIES, "Residential"),
-      clientId,
-      address: pick(row, headerMap, PROJECT_ALIASES.address),
-      city: pick(row, headerMap, PROJECT_ALIASES.city),
-      state: pick(row, headerMap, PROJECT_ALIASES.state),
-      status,
-      riskLevel: matchEnum(pick(row, headerMap, PROJECT_ALIASES.riskLevel), RISK_LEVELS, "Medium"),
-      budget: parseNumber(pick(row, headerMap, PROJECT_ALIASES.budget), 0),
-      spent: 0,
-      invoicedToDate: 0,
-      startDate: startDate.toISOString(),
-      deadline: deadline.toISOString(),
-      progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
-      teamIds: [],
-      projectManagerId: store.employees[0]?.id ?? "",
-      photos: [],
-      filesCount: 0,
-      milestones: buildDefaultMilestones(id, startDate, deadline),
-      comments: [],
-      activity: [{ id: `${id}-AC0`, actor: "System", action: "imported this project from a spreadsheet", date: now.toISOString() }],
-      description: pick(row, headerMap, PROJECT_ALIASES.description) || "Imported via Excel.",
-    };
-
-    store.projects.push(project);
-    imported++;
-  }
+  });
 
   revalidatePath("/projects");
   revalidatePath("/clients");
@@ -381,67 +403,83 @@ export async function importProjectsAction(formData: FormData) {
   redirect(`/import?type=projects&imported=${imported}&skipped=${skipped}`);
 }
 
-function logActivity(project: Project, action: string) {
-  project.activity.unshift({
-    id: `${project.id}-AC${project.activity.length}-${Date.now()}`,
-    actor: "You",
-    action,
-    date: new Date().toISOString(),
-  });
-}
-
 export async function updateProjectStatusAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
   const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
   const project = store.projects.find((p) => p.id === projectId);
+
   if (project) {
-    project.status = status;
-    if (status === "Completed") project.progress = 100;
-    logActivity(project, `changed the project status to ${status}`);
+    await writeOverlay((overlay) => {
+      const patch: Record<string, unknown> = {
+        status,
+        activity: withActivity(project, `changed the project status to ${status}`),
+      };
+      if (status === "Completed") patch.progress = 100;
+      patchEntity(overlay, "project", projectId, patch);
+    });
   }
+
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
   revalidatePath("/");
 }
 
 export async function updateProjectAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
   const project = store.projects.find((p) => p.id === projectId);
   if (!project) {
     redirect("/projects");
   }
 
-  project.name = String(formData.get("name") || "").trim() || project.name;
-  project.category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, project.category);
-  project.status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, project.status);
-  project.riskLevel = matchEnum(String(formData.get("riskLevel") || ""), RISK_LEVELS, project.riskLevel);
-  project.address = String(formData.get("address") || "").trim();
-  project.city = String(formData.get("city") || "").trim();
-  project.state = String(formData.get("state") || "").trim();
-  project.budget = parseNumber(String(formData.get("budget") || ""), project.budget);
-  project.description = String(formData.get("description") || "").trim() || project.description;
+  const name = String(formData.get("name") || "").trim() || project.name;
+  const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, project.category);
+  const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, project.status);
+  const riskLevel = matchEnum(String(formData.get("riskLevel") || ""), RISK_LEVELS, project.riskLevel);
+  const address = String(formData.get("address") || "").trim();
+  const city = String(formData.get("city") || "").trim();
+  const state = String(formData.get("state") || "").trim();
+  const budget = parseNumber(String(formData.get("budget") || ""), project.budget);
+  const description = String(formData.get("description") || "").trim() || project.description;
 
-  project.startDate = parseDateOrDefault(String(formData.get("startDate") || ""), new Date(project.startDate)).toISOString();
-  project.deadline = parseDateOrDefault(String(formData.get("deadline") || ""), new Date(project.deadline)).toISOString();
+  const startDate = parseDateOrDefault(String(formData.get("startDate") || ""), new Date(project.startDate)).toISOString();
+  const deadline = parseDateOrDefault(String(formData.get("deadline") || ""), new Date(project.deadline)).toISOString();
 
   const clientName = String(formData.get("clientName") || "");
-  if (clientName.trim()) project.clientId = resolveOrCreateClient(store, clientName);
 
   const requestedPmId = String(formData.get("projectManagerId") || "");
-  if (store.employees.some((e) => e.id === requestedPmId)) project.projectManagerId = requestedPmId;
+  const projectManagerId = store.employees.some((e) => e.id === requestedPmId) ? requestedPmId : project.projectManagerId;
 
   const teamIds = formData.getAll("teamIds").map(String).filter((id) => store.teams.some((t) => t.id === id));
-  project.teamIds = teamIds;
-  teamIds.forEach((tid) => {
-    const team = store.teams.find((t) => t.id === tid);
-    if (team && !team.currentProjectId) team.currentProjectId = project.id;
+
+  await writeOverlay((overlay) => {
+    const patch: Record<string, unknown> = {
+      name,
+      category,
+      status,
+      riskLevel,
+      address,
+      city,
+      state,
+      budget,
+      description,
+      startDate,
+      deadline,
+      projectManagerId,
+      teamIds,
+      activity: withActivity(project, "updated the project details"),
+    };
+    if (clientName.trim()) patch.clientId = resolveOrCreateClient([...store.clients], overlay, clientName);
+    if (status === "Completed") patch.progress = 100;
+
+    patchEntity(overlay, "project", projectId, patch);
+
+    teamIds.forEach((tid) => {
+      const team = store.teams.find((t) => t.id === tid);
+      if (team && !team.currentProjectId) patchEntity(overlay, "team", tid, { currentProjectId: projectId });
+    });
   });
-
-  if (project.status === "Completed") project.progress = 100;
-
-  logActivity(project, "updated the project details");
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
@@ -450,7 +488,10 @@ export async function updateProjectAction(formData: FormData) {
 }
 
 export async function addProjectPhotosAction(formData: FormData) {
-  const store = getStore();
+  // Photos are stored as base64 data URLs and can be several MB each — far too large for a
+  // cookie. They're kept in-memory only (best-effort, same-instance) rather than persisted
+  // through the session overlay; a cold start or a different serverless instance can lose them.
+  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
   const project = store.projects.find((p) => p.id === projectId);
   if (!project) return;
@@ -466,14 +507,16 @@ export async function addProjectPhotosAction(formData: FormData) {
   }
 
   if (added > 0) {
-    logActivity(project, `uploaded ${added} new site photo${added === 1 ? "" : "s"}`);
+    await writeOverlay((overlay) => {
+      patchEntity(overlay, "project", projectId, { activity: withActivity(project, `uploaded ${added} new site photo${added === 1 ? "" : "s"}`) });
+    });
   }
 
   revalidatePath(`/projects/${projectId}`);
 }
 
 export async function addProjectTaskAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
   const project = store.projects.find((p) => p.id === projectId);
   if (!project) return;
@@ -504,15 +547,18 @@ export async function addProjectTaskAction(formData: FormData) {
     comments: 0,
     tags: [],
   };
-  store.tasks.push(task);
-  logActivity(project, `added a new task: "${title}"`);
+
+  await writeOverlay((overlay) => {
+    addEntity(overlay, "task", task);
+    patchEntity(overlay, "project", projectId, { activity: withActivity(project, `added a new task: "${title}"`) });
+  });
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/tasks");
 }
 
 export async function createEquipmentAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const name = String(formData.get("name") || "").trim() || "New Equipment";
   const type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, "Excavator");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
@@ -537,46 +583,53 @@ export async function createEquipmentAction(formData: FormData) {
     hoursUsed: 0,
     purchaseDate: now.toISOString(),
   };
-  store.equipment.push(equipment);
+
+  await writeOverlay((overlay) => {
+    addEntity(overlay, "equipment", equipment);
+  });
 
   revalidatePath("/equipment");
   redirect("/equipment");
 }
 
 export async function updateEquipmentAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const equipmentId = String(formData.get("equipmentId") || "");
   const equipment = store.equipment.find((e) => e.id === equipmentId);
   if (!equipment) {
     redirect("/equipment");
   }
 
-  equipment.name = String(formData.get("name") || "").trim() || equipment.name;
-  equipment.type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, equipment.type);
-  equipment.status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, equipment.status);
-  equipment.location = String(formData.get("location") || "").trim() || equipment.location;
-  equipment.hoursUsed = parseNumber(String(formData.get("hoursUsed") || ""), equipment.hoursUsed);
-  equipment.lastMaintenance = parseDateOrDefault(String(formData.get("lastMaintenance") || ""), new Date(equipment.lastMaintenance)).toISOString();
-  equipment.nextMaintenance = parseDateOrDefault(String(formData.get("nextMaintenance") || ""), new Date(equipment.nextMaintenance)).toISOString();
-
   const requestedProjectId = String(formData.get("currentProjectId") || "");
-  equipment.currentProjectId = store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null;
+
+  await writeOverlay((overlay) => {
+    patchEntity(overlay, "equipment", equipmentId, {
+      name: String(formData.get("name") || "").trim() || equipment.name,
+      type: matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, equipment.type),
+      status: matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, equipment.status),
+      location: String(formData.get("location") || "").trim() || equipment.location,
+      hoursUsed: parseNumber(String(formData.get("hoursUsed") || ""), equipment.hoursUsed),
+      lastMaintenance: parseDateOrDefault(String(formData.get("lastMaintenance") || ""), new Date(equipment.lastMaintenance)).toISOString(),
+      nextMaintenance: parseDateOrDefault(String(formData.get("nextMaintenance") || ""), new Date(equipment.nextMaintenance)).toISOString(),
+      currentProjectId: store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null,
+    });
+  });
 
   revalidatePath("/equipment");
   redirect("/equipment");
 }
 
 export async function updateEquipmentStatusAction(formData: FormData) {
-  const store = getStore();
   const equipmentId = String(formData.get("equipmentId") || "");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
-  const equipment = store.equipment.find((e) => e.id === equipmentId);
-  if (equipment) equipment.status = status;
+  await writeOverlay((overlay) => {
+    patchEntity(overlay, "equipment", equipmentId, { status });
+  });
   revalidatePath("/equipment");
 }
 
 export async function createMaterialAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const name = String(formData.get("name") || "").trim() || "New Material";
   const category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, "Finishing");
   const unit = String(formData.get("unit") || "").trim() || "unit";
@@ -603,30 +656,37 @@ export async function createMaterialAction(formData: FormData) {
     unitCost,
     qrCode: `QR-MAT-${suffix}`,
   };
-  store.materials.push(material);
+
+  await writeOverlay((overlay) => {
+    addEntity(overlay, "material", material);
+  });
 
   revalidatePath("/warehouse");
   redirect("/warehouse");
 }
 
 export async function updateMaterialAction(formData: FormData) {
-  const store = getStore();
+  const store = await getStore();
   const materialId = String(formData.get("materialId") || "");
   const material = store.materials.find((m) => m.id === materialId);
   if (!material) {
     redirect("/warehouse");
   }
 
-  material.name = String(formData.get("name") || "").trim() || material.name;
-  material.category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, material.category);
-  material.unit = String(formData.get("unit") || "").trim() || material.unit;
-  material.quantity = parseNumber(String(formData.get("quantity") || ""), material.quantity);
-  material.reorderLevel = parseNumber(String(formData.get("reorderLevel") || ""), material.reorderLevel);
-  material.unitCost = parseNumber(String(formData.get("unitCost") || ""), material.unitCost);
-  material.warehouseLocation = String(formData.get("warehouseLocation") || "").trim() || material.warehouseLocation;
-
   const requestedSupplierId = String(formData.get("supplierId") || "");
-  if (store.suppliers.some((s) => s.id === requestedSupplierId)) material.supplierId = requestedSupplierId;
+
+  await writeOverlay((overlay) => {
+    patchEntity(overlay, "material", materialId, {
+      name: String(formData.get("name") || "").trim() || material.name,
+      category: matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, material.category),
+      unit: String(formData.get("unit") || "").trim() || material.unit,
+      quantity: parseNumber(String(formData.get("quantity") || ""), material.quantity),
+      reorderLevel: parseNumber(String(formData.get("reorderLevel") || ""), material.reorderLevel),
+      unitCost: parseNumber(String(formData.get("unitCost") || ""), material.unitCost),
+      warehouseLocation: String(formData.get("warehouseLocation") || "").trim() || material.warehouseLocation,
+      ...(store.suppliers.some((s) => s.id === requestedSupplierId) ? { supplierId: requestedSupplierId } : {}),
+    });
+  });
 
   revalidatePath("/warehouse");
   redirect("/warehouse");

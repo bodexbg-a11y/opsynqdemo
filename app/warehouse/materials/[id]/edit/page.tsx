@@ -8,7 +8,7 @@ import { MaterialForm } from "@/components/modules/material-form";
 
 export default async function EditMaterialPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { materials, suppliers } = getStore();
+  const { materials, suppliers } = await getStore();
   const material = materials.find((m) => m.id === id);
   if (!material) notFound();
 

@@ -6,8 +6,8 @@ import { TEAM_SPECIALTIES, TEAM_STATUSES } from "@/lib/data/constants";
 import { Card, PageHeader } from "@/components/ui/card";
 import { FormField, FormSection, inputClass, selectClass } from "@/components/ui/form";
 
-export default function NewTeamPage() {
-  const { employees } = getStore();
+export default async function NewTeamPage() {
+  const { employees } = await getStore();
   const construction = employees.filter((e) => e.department === "Construction");
 
   return (

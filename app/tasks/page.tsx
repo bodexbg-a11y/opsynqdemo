@@ -2,8 +2,8 @@ import { getStore } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/card";
 import { KanbanBoard } from "@/components/modules/kanban-board";
 
-export default function TasksPage() {
-  const { tasks, employees, projects } = getStore();
+export default async function TasksPage() {
+  const { tasks, employees, projects } = await getStore();
   return (
     <div className="space-y-5 pb-10">
       <PageHeader title="Task Management" subtitle={`${tasks.length} tasks across all active job sites · drag cards to update status`} />

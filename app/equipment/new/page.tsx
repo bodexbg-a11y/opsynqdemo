@@ -5,8 +5,8 @@ import { createEquipmentAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { EquipmentForm } from "@/components/modules/equipment-form";
 
-export default function NewEquipmentPage() {
-  const { projects } = getStore();
+export default async function NewEquipmentPage() {
+  const { projects } = await getStore();
 
   return (
     <div className="space-y-5 pb-10 max-w-2xl">

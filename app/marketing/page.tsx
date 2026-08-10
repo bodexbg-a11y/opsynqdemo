@@ -8,13 +8,14 @@ import { CampaignsTable } from "@/components/modules/campaigns-table";
 import { Wallet, Users, Target, TrendingUp, Sparkles } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/utils";
 
-export default function MarketingPage() {
-  const { adCampaigns, projects } = getStore();
-  const kpis = getCampaignKpis();
-  const byPlatform = getCampaignSpendByPlatform();
-  const spendSeries = getCampaignSpendSeries();
-  const performanceSummary = answerCampaignPerformance();
-  const underperformers = answerUnderperformingCampaigns();
+export default async function MarketingPage() {
+  const store = await getStore();
+  const { adCampaigns, projects } = store;
+  const kpis = getCampaignKpis(store);
+  const byPlatform = getCampaignSpendByPlatform(store);
+  const spendSeries = getCampaignSpendSeries(store);
+  const performanceSummary = answerCampaignPerformance(store);
+  const underperformers = answerUnderperformingCampaigns(store);
 
   const facebook = byPlatform.find((p) => p.platform === "Facebook");
   const google = byPlatform.find((p) => p.platform === "Google");

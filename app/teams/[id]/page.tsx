@@ -9,7 +9,7 @@ import Link from "next/link";
 
 export default async function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { teams, employees, projects } = getStore();
+  const { teams, employees, projects } = await getStore();
   const team = teams.find((t) => t.id === id);
   if (!team) notFound();
 

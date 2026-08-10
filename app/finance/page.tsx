@@ -10,11 +10,12 @@ import { InvoicesTable } from "@/components/modules/invoices-table";
 import { DollarSign, TrendingUp, FileWarning, Wallet } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
-export default function FinancePage() {
-  const { invoices, projects, clients } = getStore();
-  const kpis = getKpis();
-  const revenue = getRevenueSeries();
-  const cashFlow = getCashFlowSeries();
+export default async function FinancePage() {
+  const store = await getStore();
+  const { invoices, projects, clients } = store;
+  const kpis = getKpis(store);
+  const revenue = getRevenueSeries(store);
+  const cashFlow = getCashFlowSeries(store);
 
   const profitability = projects
     .map((p) => ({ p, ...projectProfitability(p) }))

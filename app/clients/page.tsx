@@ -5,9 +5,10 @@ import { getAllClientStats } from "@/lib/data/analytics";
 import { PageHeader } from "@/components/ui/card";
 import { ClientsTable } from "@/components/modules/clients-table";
 
-export default function ClientsPage() {
-  const { clients } = getStore();
-  const stats = Object.fromEntries(getAllClientStats());
+export default async function ClientsPage() {
+  const store = await getStore();
+  const { clients } = store;
+  const stats = Object.fromEntries(getAllClientStats(store));
 
   return (
     <div className="space-y-5 pb-10">

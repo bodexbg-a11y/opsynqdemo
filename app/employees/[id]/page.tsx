@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/utils";
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { employees, teams, projects } = getStore();
+  const { employees, teams, projects } = await getStore();
   const employee = employees.find((e) => e.id === id);
   if (!employee) notFound();
 

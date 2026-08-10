@@ -5,8 +5,8 @@ import { createMaterialAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { MaterialForm } from "@/components/modules/material-form";
 
-export default function NewMaterialPage() {
-  const { suppliers } = getStore();
+export default async function NewMaterialPage() {
+  const { suppliers } = await getStore();
 
   return (
     <div className="space-y-5 pb-10 max-w-2xl">

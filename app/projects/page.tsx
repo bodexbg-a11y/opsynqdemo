@@ -4,8 +4,8 @@ import { getStore } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/card";
 import { ProjectsTable } from "@/components/modules/projects-table";
 
-export default function ProjectsPage() {
-  const { projects, clients, employees } = getStore();
+export default async function ProjectsPage() {
+  const { projects, clients, employees } = await getStore();
   return (
     <div className="space-y-5 pb-10">
       <PageHeader

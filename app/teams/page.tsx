@@ -4,8 +4,8 @@ import { getStore } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/card";
 import { TeamsGrid } from "@/components/modules/teams-grid";
 
-export default function TeamsPage() {
-  const { teams, employees, projects } = getStore();
+export default async function TeamsPage() {
+  const { teams, employees, projects } = await getStore();
   return (
     <div className="space-y-5 pb-10">
       <PageHeader

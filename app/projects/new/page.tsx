@@ -5,8 +5,8 @@ import { createProjectAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { ProjectForm } from "@/components/modules/project-form";
 
-export default function NewProjectPage() {
-  const { employees, teams, clients } = getStore();
+export default async function NewProjectPage() {
+  const { employees, teams, clients } = await getStore();
 
   return (
     <div className="space-y-5 pb-10 max-w-3xl">

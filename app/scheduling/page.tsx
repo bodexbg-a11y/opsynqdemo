@@ -7,8 +7,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 
-export default function SchedulingPage() {
-  const { projects, tasks, teams, employees, equipment } = getStore();
+export default async function SchedulingPage() {
+  const { projects, tasks, teams, employees, equipment } = await getStore();
 
   const YEAR = 2026;
   const MONTH = 7; // August (0-indexed)

@@ -4,8 +4,8 @@ import { getStore } from "@/lib/data/store";
 import { PageHeader, Card } from "@/components/ui/card";
 import { EquipmentTable } from "@/components/modules/equipment-table";
 
-export default function EquipmentPage() {
-  const { equipment, projects } = getStore();
+export default async function EquipmentPage() {
+  const { equipment, projects } = await getStore();
   const available = equipment.filter((e) => e.status === "Available").length;
   const inUse = equipment.filter((e) => e.status === "In Use").length;
   const maintenance = equipment.filter((e) => e.status === "Maintenance").length;
