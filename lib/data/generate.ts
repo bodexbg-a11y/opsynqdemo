@@ -792,7 +792,7 @@ export function generateStore(seed = 1337): Store {
     const platform: AdPlatform = i % 2 === 0 ? "Facebook" : "Google";
     const template = platform === "Facebook" ? rand(FACEBOOK_CAMPAIGN_TEMPLATES) : rand(GOOGLE_CAMPAIGN_TEMPLATES);
     const objective = rand(CAMPAIGN_OBJECTIVES);
-    const startDate = faker.date.past({ years: 1 });
+    const startDate = faker.date.past({ years: 1, refDate: NOW_DATE });
     const isOngoing = faker.datatype.boolean({ probability: 0.55 });
     const endDate = isOngoing ? null : faker.date.between({ from: startDate, to: NOW_DATE });
     const status = isOngoing
