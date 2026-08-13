@@ -4,10 +4,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { navGroups } from "./nav-config";
 import { cn } from "@/lib/utils";
-import { HardHat, Star } from "lucide-react";
+import { logoutAction } from "@/lib/actions-auth";
+import { HardHat, Star, LogOut } from "lucide-react";
+import type { Role } from "@/lib/auth";
 
-export function Sidebar({ notificationCount = 0 }: { notificationCount?: number }) {
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "U";
+}
+
+export function Sidebar({
+  notificationCount = 0,
+  role,
+  userName,
+  userEmail,
+}: {
+  notificationCount?: number;
+  role: Role;
+  userName: string;
+  userEmail: string;
+}) {
   const pathname = usePathname();
+  const isAdmin = role === "Admin";
+
+  const groups = navGroups
+    .map((group) => ({ ...group, items: isAdmin ? group.items : group.items.filter((item) => item.pmVisible) }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:flex-col fixed inset-y-0 left-0 z-40 bg-navy-900 text-white">
@@ -22,7 +44,7 @@ export function Sidebar({ notificationCount = 0 }: { notificationCount?: number 
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {navGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.label}>
             <p className="px-3 mb-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-ink-500">
               {group.label}
@@ -69,14 +91,19 @@ export function Sidebar({ notificationCount = 0 }: { notificationCount?: number 
       </nav>
 
       <div className="p-3 border-t border-white/[0.06]">
-        <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-white/[0.05] transition-colors cursor-pointer">
+        <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">
-            VM
+            {initials(userName)}
           </div>
-          <div className="min-w-0 leading-tight">
-            <p className="text-[12.5px] font-medium truncate">Vlad Mesaros</p>
-            <p className="text-[11px] text-ink-500 truncate">CEO · Admin</p>
+          <div className="min-w-0 leading-tight flex-1">
+            <p className="text-[12.5px] font-medium truncate">{userName}</p>
+            <p className="text-[11px] text-ink-500 truncate">{isAdmin ? "Admin" : "Project Manager"}</p>
           </div>
+          <form action={logoutAction}>
+            <button type="submit" title={`Sign out (${userEmail})`} className="text-ink-400 hover:text-white transition-colors p-1">
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </form>
         </div>
       </div>
     </aside>

@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { getCurrentUser } from "@/lib/auth";
 import { projectProfitability } from "@/lib/data/analytics";
 import { addProjectPhotosAction, addProjectTaskAction, deleteProjectAction, deleteTaskAction } from "@/lib/actions";
 import { TASK_PRIORITIES } from "@/lib/data/constants";
@@ -33,11 +34,16 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await getCurrentUser();
+  const isAdmin = user?.role === "Admin";
   const store = await getStore();
   const { projects, clients, employees, teams, tasks, documents, invoices, contracts } = store;
 
   const project = projects.find((p) => p.id === id);
   if (!project) notFound();
+  // A ProjectManager may only open projects assigned to them — everything else 404s,
+  // same as a genuinely nonexistent project, rather than leaking that it exists.
+  if (!isAdmin && project.projectManagerId !== user?.employeeId) notFound();
 
   const client = clients.find((c) => c.id === project.clientId);
   const pm = employees.find((e) => e.id === project.projectManagerId);
@@ -78,26 +84,30 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 </div>
               </div>
             )}
-            <Link
-              href={`/projects/${project.id}/edit`}
-              className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              Edit
-            </Link>
-            <ConfirmDeleteForm
-              action={deleteProjectAction}
-              fields={{ projectId: project.id }}
-              confirmMessage={`Delete "${project.name}"? This also removes its tasks, invoices, contracts and documents. This cannot be undone.`}
-            >
-              <button
-                type="submit"
-                className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-danger-100 hover:border-danger-500 hover:text-danger-500 text-ink-700 rounded-lg px-3 py-2 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete
-              </button>
-            </ConfirmDeleteForm>
+            {isAdmin && (
+              <>
+                <Link
+                  href={`/projects/${project.id}/edit`}
+                  className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </Link>
+                <ConfirmDeleteForm
+                  action={deleteProjectAction}
+                  fields={{ projectId: project.id }}
+                  confirmMessage={`Delete "${project.name}"? This also removes its tasks, invoices, contracts and documents. This cannot be undone.`}
+                >
+                  <button
+                    type="submit"
+                    className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-danger-100 hover:border-danger-500 hover:text-danger-500 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                </ConfirmDeleteForm>
+              </>
+            )}
           </div>
         </div>
 

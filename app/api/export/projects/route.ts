@@ -1,7 +1,9 @@
 import ExcelJS from "exceljs";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
+  await requireAdmin();
   const { projects, clients } = await getStore();
 
   const workbook = new ExcelJS.Workbook();

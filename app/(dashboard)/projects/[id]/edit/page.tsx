@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { updateProjectAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { ProjectForm } from "@/components/modules/project-form";
 
 export default async function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const { projects, employees, teams, clients } = await getStore();
   const project = projects.find((p) => p.id === id);

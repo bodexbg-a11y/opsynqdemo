@@ -1,8 +1,10 @@
 import ExcelJS from "exceljs";
 import { getStore } from "@/lib/data/store";
 import { getAllClientStats } from "@/lib/data/analytics";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET() {
+  await requireAdmin();
   const store = await getStore();
   const stats = getAllClientStats(store);
 

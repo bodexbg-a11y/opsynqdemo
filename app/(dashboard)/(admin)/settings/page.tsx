@@ -1,14 +1,23 @@
+import Link from "next/link";
+import { Users } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { getCurrentUser } from "@/lib/auth";
 import { PageHeader, Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
-const ROLES = [
-  { name: "Admin", desc: "Full access to all modules, financials and settings", count: 8 },
-  { name: "Manager", desc: "Manage projects, teams and tasks within assigned scope", count: 34 },
-  { name: "Employee", desc: "View assigned tasks, log hours, upload documents", count: 78 },
-];
+export default async function SettingsPage() {
+  const current = await getCurrentUser();
+  const [adminCount, pmCount] = await Promise.all([
+    prisma.user.count({ where: { role: "Admin" } }),
+    prisma.user.count({ where: { role: "ProjectManager" } }),
+  ]);
 
-export default function SettingsPage() {
+  const ROLES = [
+    { name: "Admin", desc: "Full access to all modules, financials and settings", count: adminCount },
+    { name: "Project Manager", desc: "Sees only the projects and tasks assigned to them by an Admin", count: pmCount },
+  ];
+
   return (
     <div className="space-y-6 pb-10">
       <PageHeader title="Settings" subtitle="Company profile, roles, permissions and preferences" />
@@ -16,11 +25,11 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <Card className="p-6 lg:col-span-1">
           <div className="flex items-center gap-3">
-            <Avatar name="Vlad Mesaros" size={56} />
+            <Avatar name={current?.name ?? "?"} size={56} />
             <div>
-              <p className="text-[14px] font-semibold text-ink-900">Vlad Mesaros</p>
-              <p className="text-[12.5px] text-ink-500">CEO · Admin</p>
-              <p className="text-[12px] text-ink-400 mt-0.5">vladmes888@gmail.com</p>
+              <p className="text-[14px] font-semibold text-ink-900">{current?.name}</p>
+              <p className="text-[12.5px] text-ink-500">{current?.role === "Admin" ? "Admin" : "Project Manager"}</p>
+              <p className="text-[12px] text-ink-400 mt-0.5">{current?.email}</p>
             </div>
           </div>
         </Card>
@@ -50,8 +59,15 @@ export default function SettingsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="px-5 pt-5 pb-1">
+        <div className="flex items-center justify-between px-5 pt-5 pb-1">
           <h3 className="text-[14px] font-semibold text-ink-900">Roles & Permissions</h3>
+          <Link
+            href="/settings/users"
+            className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Manage Users
+          </Link>
         </div>
         <div className="divide-y divide-ink-50 mt-3">
           {ROLES.map((r) => (

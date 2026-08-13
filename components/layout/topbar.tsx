@@ -20,7 +20,23 @@ function useSectionTitle() {
   return "OPSYNQ";
 }
 
-export function Topbar({ notifications }: { notifications: AppNotification[] }) {
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+export function Topbar({
+  notifications,
+  userName,
+  isAdmin,
+}: {
+  notifications: AppNotification[];
+  userName: string;
+  isAdmin: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const unread = notifications.filter((n) => !n.read);
   const title = useSectionTitle();
@@ -41,13 +57,15 @@ export function Topbar({ notifications }: { notifications: AppNotification[] }) 
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Link
-          href="/projects/new"
-          className="hidden sm:flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
-        >
-          <Plus className="w-4 h-4" />
-          New Project
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/projects/new"
+            className="hidden sm:flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+          >
+            <Plus className="w-4 h-4" />
+            New Project
+          </Link>
+        )}
 
         <div className="relative">
           <button
@@ -100,7 +118,7 @@ export function Topbar({ notifications }: { notifications: AppNotification[] }) 
 
         <button className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-ink-50 transition-colors">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[10.5px] font-semibold text-white">
-            VM
+            {initials(userName)}
           </div>
           <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
         </button>

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { createProjectAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { ProjectForm } from "@/components/modules/project-form";
 
 export default async function NewProjectPage() {
+  await requireAdmin();
   const { employees, teams, clients } = await getStore();
 
   return (

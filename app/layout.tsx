@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Topbar } from "@/components/layout/topbar";
-import { getStore } from "@/lib/data/store";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -18,19 +15,10 @@ export const metadata: Metadata = {
 // Every page reads live data from Postgres — never statically prerender at build time.
 export const dynamic = "force-dynamic";
 
-export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const { notifications } = await getStore();
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[var(--background)]">
-        <Sidebar notificationCount={unreadCount} />
-        <div className="lg:pl-64 flex flex-col min-h-screen">
-          <Topbar notifications={notifications} />
-          <main className="flex-1 px-4 lg:px-8 py-6 max-w-[1600px] w-full mx-auto">{children}</main>
-        </div>
-      </body>
+      <body className="min-h-full bg-[var(--background)]">{children}</body>
     </html>
   );
 }

@@ -26,6 +26,8 @@ export interface NavItem {
   icon: LucideIcon;
   badgeKey?: "notifications";
   tier?: "addon";
+  /** Visible to the ProjectManager role (Admin always sees every item). */
+  pmVisible?: boolean;
 }
 
 export interface NavGroup {
@@ -44,8 +46,8 @@ export const navGroups: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Projects", href: "/projects", icon: Building2 },
-      { label: "Tasks", href: "/tasks", icon: KanbanSquare },
+      { label: "Projects", href: "/projects", icon: Building2, pmVisible: true },
+      { label: "Tasks", href: "/tasks", icon: KanbanSquare, pmVisible: true },
       { label: "Scheduling", href: "/scheduling", icon: CalendarDays, tier: "addon" },
     ],
   },

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import ExcelJS from "exceljs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
+import { requireAdmin, requireProjectAccess } from "./auth";
 import { nextEntityId } from "./data/ids";
 import { normalizeHeader, pick, cellToString, parseNumber, parseDateOrDefault, matchEnum } from "./data/import-helpers";
 import {
@@ -90,6 +91,7 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 }
 
 export async function createProjectAction(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") || "").trim() || "Untitled Project";
   const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, "Residential");
   const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
@@ -156,6 +158,7 @@ export async function createProjectAction(formData: FormData) {
 }
 
 export async function deleteProjectAction(formData: FormData) {
+  await requireAdmin();
   const projectId = String(formData.get("projectId") || "");
   await prisma.project.delete({ where: { id: projectId } }).catch(() => {});
   revalidatePath("/projects");
@@ -164,6 +167,7 @@ export async function deleteProjectAction(formData: FormData) {
 }
 
 export async function createTeamAction(formData: FormData) {
+  await requireAdmin();
   const specialty = matchEnum(String(formData.get("specialty") || ""), TEAM_SPECIALTIES, "General Labor");
   const status = matchEnum(String(formData.get("status") || ""), TEAM_STATUSES, "Available");
   const callsign = String(formData.get("callsign") || "").trim();
@@ -207,6 +211,7 @@ export async function createTeamAction(formData: FormData) {
 }
 
 export async function deleteTeamAction(formData: FormData) {
+  await requireAdmin();
   const teamId = String(formData.get("teamId") || "");
   await prisma.employee.updateMany({ where: { teamId }, data: { teamId: null } });
   await prisma.team.delete({ where: { id: teamId } }).catch(() => {});
@@ -215,6 +220,7 @@ export async function deleteTeamAction(formData: FormData) {
 }
 
 export async function updateClientStatusAction(formData: FormData) {
+  await requireAdmin();
   const clientId = String(formData.get("clientId") || "");
   const status = matchEnum(String(formData.get("status") || ""), CLIENT_STATUSES, "Lead");
   await prisma.client.update({ where: { id: clientId }, data: { status } }).catch(() => {});
@@ -223,6 +229,7 @@ export async function updateClientStatusAction(formData: FormData) {
 }
 
 export async function deleteClientAction(formData: FormData) {
+  await requireAdmin();
   const clientId = String(formData.get("clientId") || "");
   await prisma.client.delete({ where: { id: clientId } }).catch(() => {});
   revalidatePath("/clients");
@@ -293,6 +300,7 @@ async function loadWorksheetRows(file: File) {
 }
 
 export async function importClientsAction(formData: FormData) {
+  await requireAdmin();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     redirect("/import?type=clients&error=nofile");
@@ -347,6 +355,7 @@ export async function importClientsAction(formData: FormData) {
 }
 
 export async function importProjectsAction(formData: FormData) {
+  await requireAdmin();
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     redirect("/import?type=projects&error=nofile");
@@ -418,6 +427,7 @@ export async function importProjectsAction(formData: FormData) {
 
 export async function updateProjectStatusAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
+  await requireProjectAccess(projectId);
   const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
   const project = await prisma.project.findUnique({ where: { id: projectId } });
 
@@ -438,6 +448,7 @@ export async function updateProjectStatusAction(formData: FormData) {
 }
 
 export async function updateProjectAction(formData: FormData) {
+  await requireAdmin();
   const projectId = String(formData.get("projectId") || "");
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) {
@@ -502,6 +513,7 @@ export async function updateProjectAction(formData: FormData) {
 
 export async function addProjectPhotosAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
+  await requireProjectAccess(projectId);
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
 
@@ -529,6 +541,7 @@ export async function addProjectPhotosAction(formData: FormData) {
 
 export async function addProjectTaskAction(formData: FormData) {
   const projectId = String(formData.get("projectId") || "");
+  await requireProjectAccess(projectId);
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
 
@@ -576,12 +589,14 @@ export async function addProjectTaskAction(formData: FormData) {
 export async function deleteTaskAction(formData: FormData) {
   const taskId = String(formData.get("taskId") || "");
   const projectId = String(formData.get("projectId") || "");
+  await requireProjectAccess(projectId);
   await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/tasks");
 }
 
 export async function createEquipmentAction(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") || "").trim() || "New Equipment";
   const type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, "Excavator");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
@@ -616,6 +631,7 @@ export async function createEquipmentAction(formData: FormData) {
 }
 
 export async function updateEquipmentAction(formData: FormData) {
+  await requireAdmin();
   const equipmentId = String(formData.get("equipmentId") || "");
   const equipment = await prisma.equipment.findUnique({ where: { id: equipmentId } });
   if (!equipment) {
@@ -644,6 +660,7 @@ export async function updateEquipmentAction(formData: FormData) {
 }
 
 export async function updateEquipmentStatusAction(formData: FormData) {
+  await requireAdmin();
   const equipmentId = String(formData.get("equipmentId") || "");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
   await prisma.equipment.update({ where: { id: equipmentId }, data: { status } }).catch(() => {});
@@ -651,6 +668,7 @@ export async function updateEquipmentStatusAction(formData: FormData) {
 }
 
 export async function deleteEquipmentAction(formData: FormData) {
+  await requireAdmin();
   const equipmentId = String(formData.get("equipmentId") || "");
   await prisma.equipment.delete({ where: { id: equipmentId } }).catch(() => {});
   revalidatePath("/equipment");
@@ -658,6 +676,7 @@ export async function deleteEquipmentAction(formData: FormData) {
 }
 
 export async function createMaterialAction(formData: FormData) {
+  await requireAdmin();
   const name = String(formData.get("name") || "").trim() || "New Material";
   const category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, "Finishing");
   const unit = String(formData.get("unit") || "").trim() || "unit";
@@ -682,6 +701,7 @@ export async function createMaterialAction(formData: FormData) {
 }
 
 export async function updateMaterialAction(formData: FormData) {
+  await requireAdmin();
   const materialId = String(formData.get("materialId") || "");
   const material = await prisma.material.findUnique({ where: { id: materialId } });
   if (!material) {
@@ -710,6 +730,7 @@ export async function updateMaterialAction(formData: FormData) {
 }
 
 export async function deleteMaterialAction(formData: FormData) {
+  await requireAdmin();
   const materialId = String(formData.get("materialId") || "");
   await prisma.material.delete({ where: { id: materialId } }).catch(() => {});
   revalidatePath("/warehouse");

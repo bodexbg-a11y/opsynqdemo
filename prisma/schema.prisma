@@ -14,6 +14,31 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------- Auth ----------
+// Login accounts. `role` gates navigation and data visibility (Admin sees everything;
+// ProjectManager sees only the projects/tasks assigned to their linked Employee record).
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         String // "Admin" | "ProjectManager"
+  employeeId   String?   @unique
+  createdAt    DateTime  @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
 model Project {
   id               String    @id
   name             String

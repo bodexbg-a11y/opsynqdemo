@@ -1,10 +1,18 @@
 import "dotenv/config";
+import { randomBytes, scryptSync } from "crypto";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { generateStore } from "../lib/data/generate";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
+
+// Mirrors lib/auth.ts hashPassword — duplicated here since seed.ts runs standalone via tsx.
+function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
 
 // The seed data uses our strict domain interfaces (Client, Project, …), but Prisma's
 // generated `createMany` input types want its own recursive Json type for jsonb columns
@@ -89,6 +97,34 @@ async function main() {
 
   console.log(`Seeding ${store.adCampaigns.length} ad campaigns…`);
   await prisma.adCampaign.createMany({ data: asInput<Prisma.AdCampaignCreateManyInput>(store.adCampaigns) });
+
+  console.log("Seeding demo login accounts…");
+  const DEMO_PASSWORD = "opsynq2026";
+  await prisma.user.upsert({
+    where: { email: "admin@opsynq.demo" },
+    update: {},
+    create: {
+      name: "Vlad Mesaros",
+      email: "admin@opsynq.demo",
+      passwordHash: hashPassword(DEMO_PASSWORD),
+      role: "Admin",
+    },
+  });
+
+  const pmEmployee = store.employees.find((e) => e.role === "Project Manager") ?? store.employees[0];
+  if (pmEmployee) {
+    await prisma.user.upsert({
+      where: { email: "manager@opsynq.demo" },
+      update: {},
+      create: {
+        name: pmEmployee.name,
+        email: "manager@opsynq.demo",
+        passwordHash: hashPassword(DEMO_PASSWORD),
+        role: "ProjectManager",
+        employeeId: pmEmployee.id,
+      },
+    });
+  }
 
   console.log("Done.");
 }
