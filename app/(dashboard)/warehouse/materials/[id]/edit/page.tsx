@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { updateMaterialAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { MaterialForm } from "@/components/modules/material-form";
 
 export default async function EditMaterialPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const { materials, suppliers } = await getStore();
   const material = materials.find((m) => m.id === id);

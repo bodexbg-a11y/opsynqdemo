@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { createEquipmentAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { EquipmentForm } from "@/components/modules/equipment-form";
 
 export default async function NewEquipmentPage() {
+  await requireAdmin();
   const { projects } = await getStore();
 
   return (

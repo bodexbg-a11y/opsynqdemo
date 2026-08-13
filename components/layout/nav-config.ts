@@ -69,15 +69,15 @@ export const navGroups: NavGroup[] = [
   {
     label: "Resources",
     items: [
-      { label: "Equipment", href: "/equipment", icon: Truck, tier: "addon" },
-      { label: "Warehouse", href: "/warehouse", icon: Warehouse, tier: "addon" },
+      { label: "Equipment", href: "/equipment", icon: Truck, tier: "addon", pmVisible: true },
+      { label: "Warehouse", href: "/warehouse", icon: Warehouse, tier: "addon", pmVisible: true },
     ],
   },
   {
     label: "Business",
     items: [
       { label: "Finance", href: "/finance", icon: Wallet, tier: "addon" },
-      { label: "Documents", href: "/documents", icon: FolderClosed },
+      { label: "Documents", href: "/documents", icon: FolderClosed, pmVisible: true },
       { label: "Reports", href: "/reports", icon: BarChart3, tier: "addon" },
     ],
   },

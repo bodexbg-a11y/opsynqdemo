@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { updateEquipmentAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { EquipmentForm } from "@/components/modules/equipment-form";
 
 export default async function EditEquipmentPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireAdmin();
   const { id } = await params;
   const { equipment, projects } = await getStore();
   const item = equipment.find((e) => e.id === id);

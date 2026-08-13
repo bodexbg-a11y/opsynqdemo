@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { requireAdmin } from "@/lib/auth";
 import { createMaterialAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
 import { MaterialForm } from "@/components/modules/material-form";
 
 export default async function NewMaterialPage() {
+  await requireAdmin();
   const { suppliers } = await getStore();
 
   return (

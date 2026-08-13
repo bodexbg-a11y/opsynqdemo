@@ -7,11 +7,18 @@ import type { Equipment, Project } from "@/lib/data/types";
 import { deleteEquipmentAction } from "@/lib/actions";
 import { EquipmentStatusSelect } from "./equipment-status-select";
 import { ConfirmDeleteForm } from "./confirm-delete-form";
+import { Badge } from "@/components/ui/badge";
 import { cn, formatDate } from "@/lib/utils";
 
 const STATUS_FILTERS = ["All", "Available", "In Use", "Maintenance"] as const;
 
-export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]; projects: Project[] }) {
+const STATUS_BADGE_VARIANT: Record<Equipment["status"], "success" | "blue" | "danger"> = {
+  Available: "success",
+  "In Use": "blue",
+  Maintenance: "danger",
+};
+
+export function EquipmentTable({ equipment, projects, isAdmin }: { equipment: Equipment[]; projects: Project[]; isAdmin: boolean }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("All");
 
@@ -72,7 +79,11 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                     <td className="px-5 py-3 font-medium text-ink-800 whitespace-nowrap">{eq.name}</td>
                     <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{eq.type}</td>
                     <td className="px-4 py-3">
-                      <EquipmentStatusSelect equipmentId={eq.id} status={eq.status} />
+                      {isAdmin ? (
+                        <EquipmentStatusSelect equipmentId={eq.id} status={eq.status} />
+                      ) : (
+                        <Badge variant={STATUS_BADGE_VARIANT[eq.status]}>{eq.status}</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-ink-500 whitespace-nowrap">
                       <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{project ? <Link href={`/projects/${project.id}`} className="hover:text-blue-600 hover:underline">{project.name}</Link> : eq.location}</span>
@@ -81,16 +92,18 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                     <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{formatDate(eq.nextMaintenance)}</td>
                     <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{eq.qrCode}</span></td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Link href={`/equipment/${eq.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Link>
-                        <ConfirmDeleteForm action={deleteEquipmentAction} fields={{ equipmentId: eq.id }} confirmMessage={`Delete "${eq.name}"?`}>
-                          <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </ConfirmDeleteForm>
-                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-2.5">
+                          <Link href={`/equipment/${eq.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Link>
+                          <ConfirmDeleteForm action={deleteEquipmentAction} fields={{ equipmentId: eq.id }} confirmMessage={`Delete "${eq.name}"?`}>
+                            <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </ConfirmDeleteForm>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

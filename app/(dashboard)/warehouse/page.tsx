@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStore } from "@/lib/data/store";
+import { getCurrentUser } from "@/lib/auth";
 import { deleteMaterialAction } from "@/lib/actions";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
@@ -10,6 +11,8 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { QrCode, Star, Plus, Pencil, Trash2 } from "lucide-react";
 
 export default async function WarehousePage() {
+  const user = await getCurrentUser();
+  const isAdmin = user?.role === "Admin";
   const { materials, suppliers, purchaseOrders } = await getStore();
   const lowStock = materials.filter((m) => m.quantity < m.reorderLevel);
 
@@ -19,13 +22,15 @@ export default async function WarehousePage() {
         title="Warehouse"
         subtitle={`${materials.length} SKUs tracked · ${lowStock.length} below reorder level`}
         action={
-          <Link
-            href="/warehouse/materials/new"
-            className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
-          >
-            <Plus className="w-4 h-4" />
-            New Material
-          </Link>
+          isAdmin ? (
+            <Link
+              href="/warehouse/materials/new"
+              className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+            >
+              <Plus className="w-4 h-4" />
+              New Material
+            </Link>
+          ) : undefined
         }
       />
       <Tabs
@@ -69,16 +74,18 @@ export default async function WarehousePage() {
                             <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{formatCurrency(m.unitCost)}</td>
                             <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{m.qrCode}</span></td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2.5">
-                                <Link href={`/warehouse/materials/${m.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Link>
-                                <ConfirmDeleteForm action={deleteMaterialAction} fields={{ materialId: m.id }} confirmMessage={`Delete "${m.name}"?`}>
-                                  <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </ConfirmDeleteForm>
-                              </div>
+                              {isAdmin && (
+                                <div className="flex items-center gap-2.5">
+                                  <Link href={`/warehouse/materials/${m.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Link>
+                                  <ConfirmDeleteForm action={deleteMaterialAction} fields={{ materialId: m.id }} confirmMessage={`Delete "${m.name}"?`}>
+                                    <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </ConfirmDeleteForm>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
