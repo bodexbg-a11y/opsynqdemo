@@ -15,6 +15,15 @@ function asInput<T>(rows: unknown[]): T[] {
 }
 
 async function main() {
+  // Safe to run on every deploy: only seeds an empty database. Real demo activity
+  // (projects created/edited/deleted through the app) is never touched or wiped —
+  // pass FORCE_SEED=true to explicitly reset back to the deterministic demo dataset.
+  const existingCount = await prisma.project.count();
+  if (existingCount > 0 && process.env.FORCE_SEED !== "true") {
+    console.log(`Database already has ${existingCount} projects — skipping seed. Set FORCE_SEED=true to reset.`);
+    return;
+  }
+
   const store = generateStore(1337);
 
   console.log("Clearing existing data…");
