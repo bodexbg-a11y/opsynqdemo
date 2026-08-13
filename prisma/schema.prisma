@@ -56,6 +56,10 @@ model AppSettings {
   budgetWarningPct   Int @default(85)
   deadlineWarningDays Int @default(14)
 
+  // Meta Marketing API access token. Stored here so it can be rotated from the
+  // UI when it expires; FACEBOOK_ACCESS_TOKEN is the fallback when unset.
+  facebookAccessToken String?
+
   updatedAt DateTime @updatedAt
 }
 

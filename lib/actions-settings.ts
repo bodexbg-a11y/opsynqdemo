@@ -116,3 +116,25 @@ export async function updateAppSettingsAction(formData: FormData) {
   const tab = String(formData.get("tab") || "").trim();
   redirect(`/settings?saved=workspace${tab ? `&tab=${encodeURIComponent(tab)}` : ""}`);
 }
+
+/** Admin-only: saves or clears the Meta Marketing API access token. */
+export async function updateFacebookTokenAction(formData: FormData) {
+  await requireAdmin();
+
+  const clearing = formData.get("disconnect") === "on";
+  const token = String(formData.get("facebookAccessToken") || "").trim();
+
+  // Blank submit with no explicit disconnect means "leave the saved token alone",
+  // so a user editing other fields can't wipe it by accident.
+  if (!clearing && !token) redirect("/settings?tab=Integrations");
+
+  await prisma.appSettings.upsert({
+    where: { id: SETTINGS_ID },
+    update: { facebookAccessToken: clearing ? null : token },
+    create: { id: SETTINGS_ID, facebookAccessToken: clearing ? null : token },
+  });
+
+  revalidatePath("/settings");
+  revalidatePath("/marketing");
+  redirect(`/settings?saved=${clearing ? "facebook_disconnected" : "facebook"}&tab=Integrations`);
+}

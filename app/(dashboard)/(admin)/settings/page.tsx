@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { FormField, FormSection, inputClass, selectClass } from "@/components/ui/form";
 import { AvatarUpload } from "@/components/modules/avatar-upload";
+import { FacebookConnection } from "@/components/modules/facebook-connection";
 
 const ERRORS: Record<string, string> = {
   invalid: "Name and email are both required.",
@@ -24,6 +25,8 @@ const SAVED: Record<string, string> = {
   profile: "Profile updated.",
   password: "Password changed.",
   workspace: "Workspace settings saved.",
+  facebook: "Facebook access token saved.",
+  facebook_disconnected: "Facebook disconnected.",
 };
 
 function Toggle({ name, label, hint, defaultChecked }: { name: string; label: string; hint: string; defaultChecked: boolean }) {
@@ -289,6 +292,10 @@ export default async function SettingsPage({
                 </form>
               </Card>
             ),
+          },
+          {
+            label: "Integrations",
+            content: <FacebookConnection />,
           },
           {
             label: "Roles & Access",
