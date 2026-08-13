@@ -31,6 +31,10 @@ export interface CurrentUser {
   name: string;
   role: Role;
   employeeId: string | null;
+  title: string | null;
+  phone: string | null;
+  /** data: URL of the uploaded avatar, or null to fall back to initials. */
+  avatarUrl: string | null;
 }
 
 export async function createSession(userId: string): Promise<void> {
@@ -68,6 +72,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     name: session.user.name,
     role: session.user.role as Role,
     employeeId: session.user.employeeId,
+    title: session.user.title,
+    phone: session.user.phone,
+    avatarUrl: session.user.avatarUrl,
   };
 });
 

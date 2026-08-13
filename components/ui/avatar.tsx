@@ -14,7 +14,32 @@ function hash(s: string) {
   return h;
 }
 
-export function Avatar({ name, size = 32, className }: { name: string; size?: number; className?: string }) {
+export function Avatar({
+  name,
+  size = 32,
+  className,
+  src,
+}: {
+  name: string;
+  size?: number;
+  className?: string;
+  /** Uploaded avatar image; falls back to initials when absent. */
+  src?: string | null;
+}) {
+  if (src) {
+    return (
+      // Avatars are user-uploaded data: URLs, which next/image can't optimise —
+      // a plain img is the correct element here.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        className={cn("rounded-full object-cover shrink-0 ring-2 ring-white", className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   const palette = PALETTE[hash(name) % PALETTE.length];
   return (
     <div

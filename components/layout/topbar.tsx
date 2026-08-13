@@ -32,10 +32,12 @@ export function Topbar({
   notifications,
   userName,
   isAdmin,
+  avatarUrl,
 }: {
   notifications: AppNotification[];
   userName: string;
   isAdmin: boolean;
+  avatarUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const unread = notifications.filter((n) => !n.read);
@@ -116,12 +118,17 @@ export function Topbar({
           )}
         </div>
 
-        <button className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-ink-50 transition-colors">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[10.5px] font-semibold text-white">
-            {initials(userName)}
-          </div>
+        <Link href="/settings" className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-lg hover:bg-ink-50 transition-colors" title="Settings">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt={userName} className="w-7 h-7 rounded-full object-cover" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[10.5px] font-semibold text-white">
+              {initials(userName)}
+            </div>
+          )}
           <ChevronDown className="w-3.5 h-3.5 text-ink-400" />
-        </button>
+        </Link>
       </div>
     </header>
   );

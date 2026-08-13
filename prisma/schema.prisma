@@ -24,8 +24,39 @@ model User {
   name         String
   role         String // "Admin" | "ProjectManager"
   employeeId   String?   @unique
+  title        String? // free-text job title shown on the profile card
+  phone        String?
+  avatarUrl    String? // data: URL of the uploaded avatar; null falls back to initials
   createdAt    DateTime  @default(now())
   sessions     Session[]
+}
+
+// Single-row table holding workspace-wide preferences. Always addressed by the
+// fixed id "singleton" so there is exactly one settings record.
+model AppSettings {
+  id           String @id @default("singleton")
+  companyName  String @default("OPSYNQ Builders Group")
+  headquarters String @default("Denver, CO")
+  industry     String @default("General Contracting")
+  plan         String @default("Enterprise")
+  currency     String @default("USD")
+  dateFormat   String @default("MMM d, yyyy")
+  timezone     String @default("America/Denver")
+
+  // Notification preferences — which alert types are generated and surfaced.
+  notifyDelayedProjects      Boolean @default(true)
+  notifyOverdueInvoices      Boolean @default(true)
+  notifyEquipmentMaintenance Boolean @default(true)
+  notifyLowInventory         Boolean @default(true)
+  notifyEmployeeAbsence      Boolean @default(false)
+  emailDigest                String  @default("Weekly") // "Off" | "Daily" | "Weekly"
+
+  // Operational thresholds that drive the warning states across the app.
+  lowStockBufferPct  Int @default(0)
+  budgetWarningPct   Int @default(85)
+  deadlineWarningDays Int @default(14)
+
+  updatedAt DateTime @updatedAt
 }
 
 model Session {

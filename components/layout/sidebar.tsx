@@ -18,11 +18,13 @@ export function Sidebar({
   role,
   userName,
   userEmail,
+  avatarUrl,
 }: {
   notificationCount?: number;
   role: Role;
   userName: string;
   userEmail: string;
+  avatarUrl?: string | null;
 }) {
   const pathname = usePathname();
   const isAdmin = role === "Admin";
@@ -92,9 +94,14 @@ export function Sidebar({
 
       <div className="p-3 border-t border-white/[0.06]">
         <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">
-            {initials(userName)}
-          </div>
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt={userName} className="w-8 h-8 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">
+              {initials(userName)}
+            </div>
+          )}
           <div className="min-w-0 leading-tight flex-1">
             <p className="text-[12.5px] font-medium truncate">{userName}</p>
             <p className="text-[11px] text-ink-500 truncate">{isAdmin ? "Admin" : "Project Manager"}</p>
