@@ -7,12 +7,13 @@ import { Tabs } from "@/components/ui/tabs";
 import { RevenueChart } from "@/components/charts/revenue-chart";
 import { CashFlowChart } from "@/components/charts/cash-flow-chart";
 import { InvoicesTable } from "@/components/modules/invoices-table";
+import { ProjectFinanceExplorer } from "@/components/modules/project-finance-explorer";
 import { DollarSign, TrendingUp, FileWarning, Wallet } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export default async function FinancePage() {
   const store = await getStore();
-  const { invoices, projects, clients } = store;
+  const { invoices, projects, clients, contracts, employees, tasks } = store;
   const kpis = getKpis(store);
   const revenue = getRevenueSeries(store);
   const cashFlow = getCashFlowSeries(store);
@@ -47,6 +48,19 @@ export default async function FinancePage() {
                   <div className="px-3 pb-4"><CashFlowChart data={cashFlow} /></div>
                 </Card>
               </div>
+            ),
+          },
+          {
+            label: "By Project",
+            content: (
+              <ProjectFinanceExplorer
+                projects={projects}
+                invoices={invoices}
+                contracts={contracts}
+                clients={clients}
+                employees={employees}
+                tasks={tasks}
+              />
             ),
           },
           {

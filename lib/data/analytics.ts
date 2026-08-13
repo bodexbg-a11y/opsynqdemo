@@ -117,6 +117,62 @@ export function projectProfitability(p: Project) {
   return { profit, margin };
 }
 
+export interface ProjectFinancials {
+  project: Project;
+  budget: number;
+  spent: number;
+  /** Budget left to spend before the job goes over. */
+  remainingBudget: number;
+  budgetUsedPct: number;
+  invoicedToDate: number;
+  /** Cash actually received — sum of paid invoices. */
+  collected: number;
+  /** Issued but not yet paid — pending plus overdue. */
+  outstanding: number;
+  overdue: number;
+  /** Contract value signed for the job, which can exceed the working budget. */
+  contractValue: number;
+  profit: number;
+  margin: number;
+  invoiceCount: number;
+  paidCount: number;
+  overdueCount: number;
+}
+
+/** Full income/expense picture for one project — powers the Finance drill-down. */
+export function getProjectFinancials(store: Store, projectId: string): ProjectFinancials | null {
+  const project = store.projects.find((p) => p.id === projectId);
+  if (!project) return null;
+
+  const projectInvoices = store.invoices.filter((iv) => iv.projectId === projectId);
+  const collected = projectInvoices.filter((iv) => iv.status === "Paid").reduce((s, iv) => s + iv.amount, 0);
+  const overdueInvoices = projectInvoices.filter((iv) => iv.status === "Overdue");
+  const overdue = overdueInvoices.reduce((s, iv) => s + iv.amount, 0);
+  const outstanding = projectInvoices
+    .filter((iv) => iv.status === "Pending" || iv.status === "Overdue")
+    .reduce((s, iv) => s + iv.amount, 0);
+  const contractValue = store.contracts.filter((c) => c.projectId === projectId).reduce((s, c) => s + c.value, 0);
+  const { profit, margin } = projectProfitability(project);
+
+  return {
+    project,
+    budget: project.budget,
+    spent: project.spent,
+    remainingBudget: project.budget - project.spent,
+    budgetUsedPct: project.budget ? (project.spent / project.budget) * 100 : 0,
+    invoicedToDate: project.invoicedToDate,
+    collected,
+    outstanding,
+    overdue,
+    contractValue,
+    profit,
+    margin,
+    invoiceCount: projectInvoices.length,
+    paidCount: projectInvoices.filter((iv) => iv.status === "Paid").length,
+    overdueCount: overdueInvoices.length,
+  };
+}
+
 export function getAiInsights(store: Store) {
   const { projects, invoices, teams } = store;
   const insights: { title: string; body: string; severity: "info" | "warning" | "critical" }[] = [];
