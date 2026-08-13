@@ -1,5 +1,5 @@
 import { CheckCircle2, AlertTriangle, Upload, FileSpreadsheet } from "lucide-react";
-import { importClientsAction, importProjectsAction } from "@/lib/actions";
+import { importClientsAction, importProjectsAction, importEmployeesAction } from "@/lib/actions";
 import { Card, PageHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 
@@ -82,11 +82,11 @@ export default async function ImportPage({
   searchParams: Promise<{ type?: string; imported?: string; skipped?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const defaultTab = params.type === "projects" ? "Projects" : "Clients";
+  const defaultTab = params.type === "projects" ? "Projects" : params.type === "employees" ? "Employees" : "Clients";
 
   return (
     <div className="space-y-5 pb-10 max-w-3xl">
-      <PageHeader title="Import Data" subtitle="Bulk-upload your existing clients and projects from an Excel spreadsheet" />
+      <PageHeader title="Import Data" subtitle="Bulk-upload your existing clients, projects and employees from an Excel spreadsheet" />
 
       <ResultBanner imported={params.imported} skipped={params.skipped} error={params.error} />
 
@@ -132,6 +132,28 @@ export default async function ImportPage({
                   { name: "Status" },
                   { name: "Risk Level" },
                   { name: "Description" },
+                ]}
+              />
+            ),
+          },
+          {
+            label: "Employees",
+            content: (
+              <ImportForm
+                action={importEmployeesAction}
+                cta="Import Employees"
+                columns={[
+                  { name: "Name", required: true },
+                  { name: "Role" },
+                  { name: "Department" },
+                  { name: "Email" },
+                  { name: "Phone" },
+                  { name: "City" },
+                  { name: "Employment Type" },
+                  { name: "Status" },
+                  { name: "Access Level" },
+                  { name: "Hire Date" },
+                  { name: "Weekly Hours" },
                 ]}
               />
             ),

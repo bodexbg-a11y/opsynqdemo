@@ -20,6 +20,12 @@ import {
   EQUIPMENT_TYPES,
   EQUIPMENT_STATUSES,
   MATERIAL_CATEGORIES,
+  EMPLOYEE_DEPARTMENTS,
+  EMPLOYEE_STATUSES,
+  EMPLOYEE_PERMISSIONS,
+  EMPLOYMENT_TYPES,
+  SUB_TRADES,
+  SUBCONTRACTOR_STATUSES,
 } from "./data/constants";
 import type { Milestone, ActivityItem, TaskStatus, TaskPriority } from "./data/types";
 
@@ -722,6 +728,233 @@ export async function deleteTaskByIdAction(formData: FormData) {
   await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
   revalidatePath("/tasks");
   revalidatePath(`/projects/${task.projectId}`);
+}
+
+/* ── Employees ─────────────────────────────────────────────────────────────── */
+
+function employeeFieldsFromForm(formData: FormData) {
+  return {
+    name: String(formData.get("name") || "").trim(),
+    role: String(formData.get("role") || "").trim() || "General Laborer",
+    department: matchEnum(String(formData.get("department") || ""), EMPLOYEE_DEPARTMENTS, "Construction"),
+    permission: matchEnum(String(formData.get("permission") || ""), EMPLOYEE_PERMISSIONS, "Employee"),
+    email: String(formData.get("email") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    employmentType: matchEnum(String(formData.get("employmentType") || ""), EMPLOYMENT_TYPES, "Full-time"),
+    status: matchEnum(String(formData.get("status") || ""), EMPLOYEE_STATUSES, "Active"),
+    city: String(formData.get("city") || "").trim(),
+    weeklyHours: parseNumber(String(formData.get("weeklyHours") || ""), 40),
+    vacationTotal: parseNumber(String(formData.get("vacationTotal") || ""), 20),
+  };
+}
+
+export async function createEmployeeAction(formData: FormData) {
+  await requireAdmin();
+  const fields = employeeFieldsFromForm(formData);
+  if (!fields.name) redirect("/employees/new?error=name");
+
+  const requestedTeamId = String(formData.get("teamId") || "").trim();
+  const teamExists = requestedTeamId && (await prisma.team.findUnique({ where: { id: requestedTeamId }, select: { id: true } }));
+
+  const existingIds = await prisma.employee.findMany({ select: { id: true } });
+  const id = nextEntityId("EMP", existingIds);
+
+  await prisma.employee.create({
+    data: {
+      id,
+      ...fields,
+      hireDate: parseDateOrDefault(String(formData.get("hireDate") || ""), new Date()),
+      teamId: teamExists ? requestedTeamId : null,
+      vacationUsed: 0,
+      payrollStatus: "Pending",
+      performanceScore: 75,
+      avatarSeed: id,
+      certifications: formData.getAll("certifications").map(String).filter(Boolean),
+    },
+  });
+
+  revalidatePath("/employees");
+  redirect(`/employees/${id}`);
+}
+
+export async function updateEmployeeAction(formData: FormData) {
+  await requireAdmin();
+  const employeeId = String(formData.get("employeeId") || "");
+  const existing = await prisma.employee.findUnique({ where: { id: employeeId } });
+  if (!existing) redirect("/employees");
+
+  const fields = employeeFieldsFromForm(formData);
+  const requestedTeamId = String(formData.get("teamId") || "").trim();
+  const teamExists = requestedTeamId && (await prisma.team.findUnique({ where: { id: requestedTeamId }, select: { id: true } }));
+
+  await prisma.employee.update({
+    where: { id: employeeId },
+    data: {
+      ...fields,
+      name: fields.name || existing.name,
+      hireDate: parseDateOrDefault(String(formData.get("hireDate") || ""), existing.hireDate),
+      teamId: teamExists ? requestedTeamId : null,
+    },
+  });
+
+  revalidatePath("/employees");
+  revalidatePath(`/employees/${employeeId}`);
+  redirect(`/employees/${employeeId}`);
+}
+
+export async function deleteEmployeeAction(formData: FormData) {
+  await requireAdmin();
+  const employeeId = String(formData.get("employeeId") || "");
+  // Employees are referenced by id from projects/tasks/teams as plain scalars, so clear
+  // the places that would otherwise point at a missing person.
+  await prisma.team.updateMany({ where: { foremanId: employeeId }, data: { foremanId: "" } });
+  await prisma.employee.delete({ where: { id: employeeId } }).catch(() => {});
+  revalidatePath("/employees");
+  redirect("/employees");
+}
+
+const EMPLOYEE_ALIASES = {
+  name: ["name", "fullname", "employeename", "employee"].map(normalizeHeader),
+  role: ["role", "position", "jobtitle", "title"].map(normalizeHeader),
+  department: ["department", "dept", "division"].map(normalizeHeader),
+  email: ["email", "emailaddress", "workemail"].map(normalizeHeader),
+  phone: ["phone", "telephone", "mobile", "phonenumber"].map(normalizeHeader),
+  city: ["city", "town", "location"].map(normalizeHeader),
+  employmentType: ["employmenttype", "type", "contracttype"].map(normalizeHeader),
+  status: ["status", "employeestatus"].map(normalizeHeader),
+  permission: ["permission", "accesslevel", "access", "systemrole"].map(normalizeHeader),
+  hireDate: ["hiredate", "startdate", "joined", "joindate"].map(normalizeHeader),
+  weeklyHours: ["weeklyhours", "hours", "hoursperweek"].map(normalizeHeader),
+};
+
+export async function importEmployeesAction(formData: FormData) {
+  await requireAdmin();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/import?type=employees&error=nofile");
+  }
+
+  const { headerMap, rows } = await loadWorksheetRows(file as File);
+  const idPool = await prisma.employee.findMany({ select: { id: true } });
+
+  let imported = 0;
+  let skipped = 0;
+  const toCreate: Prisma.EmployeeCreateManyInput[] = [];
+
+  for (const row of rows) {
+    const name = pick(row, headerMap, EMPLOYEE_ALIASES.name);
+    if (!name) {
+      skipped++;
+      continue;
+    }
+
+    const id = nextEntityId("EMP", idPool);
+    idPool.push({ id });
+
+    toCreate.push({
+      id,
+      name,
+      role: pick(row, headerMap, EMPLOYEE_ALIASES.role) || "General Laborer",
+      department: matchEnum(pick(row, headerMap, EMPLOYEE_ALIASES.department), EMPLOYEE_DEPARTMENTS, "Construction"),
+      permission: matchEnum(pick(row, headerMap, EMPLOYEE_ALIASES.permission), EMPLOYEE_PERMISSIONS, "Employee"),
+      email: pick(row, headerMap, EMPLOYEE_ALIASES.email),
+      phone: pick(row, headerMap, EMPLOYEE_ALIASES.phone),
+      hireDate: parseDateOrDefault(pick(row, headerMap, EMPLOYEE_ALIASES.hireDate), new Date()),
+      employmentType: matchEnum(pick(row, headerMap, EMPLOYEE_ALIASES.employmentType), EMPLOYMENT_TYPES, "Full-time"),
+      status: matchEnum(pick(row, headerMap, EMPLOYEE_ALIASES.status), EMPLOYEE_STATUSES, "Active"),
+      teamId: null,
+      vacationUsed: 0,
+      vacationTotal: 20,
+      weeklyHours: parseNumber(pick(row, headerMap, EMPLOYEE_ALIASES.weeklyHours), 40),
+      payrollStatus: "Pending",
+      performanceScore: 75,
+      avatarSeed: id,
+      certifications: [],
+      city: pick(row, headerMap, EMPLOYEE_ALIASES.city),
+    });
+    imported++;
+  }
+
+  if (toCreate.length) await prisma.employee.createMany({ data: toCreate });
+
+  revalidatePath("/employees");
+  redirect(`/import?type=employees&imported=${imported}&skipped=${skipped}`);
+}
+
+/* ── Subcontractors ────────────────────────────────────────────────────────── */
+
+function subcontractorFieldsFromForm(formData: FormData) {
+  return {
+    company: String(formData.get("company") || "").trim(),
+    trade: matchEnum(String(formData.get("trade") || ""), SUB_TRADES, "Electrical"),
+    contactName: String(formData.get("contactName") || "").trim(),
+    phone: String(formData.get("phone") || "").trim(),
+    email: String(formData.get("email") || "").trim(),
+    status: matchEnum(String(formData.get("status") || ""), SUBCONTRACTOR_STATUSES, "Active"),
+    rating: Math.min(5, Math.max(0, parseNumber(String(formData.get("rating") || ""), 4))),
+  };
+}
+
+export async function createSubcontractorAction(formData: FormData) {
+  await requireAdmin();
+  const fields = subcontractorFieldsFromForm(formData);
+  if (!fields.company) redirect("/subcontractors/new?error=company");
+
+  const requestedProjectIds = formData.getAll("activeProjectIds").map(String).filter(Boolean);
+  const validProjects = requestedProjectIds.length
+    ? await prisma.project.findMany({ where: { id: { in: requestedProjectIds } }, select: { id: true } })
+    : [];
+
+  const existingIds = await prisma.subcontractor.findMany({ select: { id: true } });
+  const id = nextEntityId("SUB", existingIds);
+
+  await prisma.subcontractor.create({
+    data: {
+      id,
+      ...fields,
+      jobsCompleted: parseNumber(String(formData.get("jobsCompleted") || ""), 0),
+      activeProjectIds: validProjects.map((p) => p.id),
+      totalInvoiced: parseNumber(String(formData.get("totalInvoiced") || ""), 0),
+    },
+  });
+
+  revalidatePath("/subcontractors");
+  redirect("/subcontractors");
+}
+
+export async function updateSubcontractorAction(formData: FormData) {
+  await requireAdmin();
+  const subcontractorId = String(formData.get("subcontractorId") || "");
+  const existing = await prisma.subcontractor.findUnique({ where: { id: subcontractorId } });
+  if (!existing) redirect("/subcontractors");
+
+  const fields = subcontractorFieldsFromForm(formData);
+  const requestedProjectIds = formData.getAll("activeProjectIds").map(String).filter(Boolean);
+  const validProjects = requestedProjectIds.length
+    ? await prisma.project.findMany({ where: { id: { in: requestedProjectIds } }, select: { id: true } })
+    : [];
+
+  await prisma.subcontractor.update({
+    where: { id: subcontractorId },
+    data: {
+      ...fields,
+      company: fields.company || existing.company,
+      jobsCompleted: parseNumber(String(formData.get("jobsCompleted") || ""), existing.jobsCompleted),
+      activeProjectIds: validProjects.map((p) => p.id),
+      totalInvoiced: parseNumber(String(formData.get("totalInvoiced") || ""), existing.totalInvoiced),
+    },
+  });
+
+  revalidatePath("/subcontractors");
+  redirect("/subcontractors");
+}
+
+export async function deleteSubcontractorAction(formData: FormData) {
+  await requireAdmin();
+  const subcontractorId = String(formData.get("subcontractorId") || "");
+  await prisma.subcontractor.delete({ where: { id: subcontractorId } }).catch(() => {});
+  revalidatePath("/subcontractors");
+  redirect("/subcontractors");
 }
 
 export async function createEquipmentAction(formData: FormData) {

@@ -2,13 +2,31 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { Employee, Team } from "@/lib/data/types";
+import {
+  EMPLOYEE_DEPARTMENTS,
+  EMPLOYEE_STATUSES,
+  EMPLOYMENT_TYPES,
+  EMPLOYEE_PERMISSIONS,
+} from "@/lib/data/constants";
+import { deleteEmployeeAction } from "@/lib/actions";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import {
+  SearchInput,
+  FilterSelect,
+  FilterSelectPairs,
+  FilterPills,
+  ClearFiltersButton,
+  SortHeader,
+  nextSort,
+  compareValues,
+} from "@/components/ui/filter-bar";
+import { ConfirmDeleteForm } from "./confirm-delete-form";
 
-const DEPARTMENTS = ["All", "Construction", "Management", "Finance", "Human Resources", "Safety", "Design", "Procurement"] as const;
+const DEPARTMENT_PILLS = ["All", ...EMPLOYEE_DEPARTMENTS] as const;
+type DeptPill = (typeof DEPARTMENT_PILLS)[number];
 
 const STATUS_TONE: Record<Employee["status"], "success" | "warning" | "neutral"> = {
   Active: "success",
@@ -22,43 +40,98 @@ const PAYROLL_TONE: Record<Employee["payrollStatus"], "success" | "warning" | "n
   Processing: "neutral",
 };
 
+type SortKey = "name" | "department" | "team" | "status" | "performance" | "hireDate";
+
 export function EmployeesTable({ employees, teams }: { employees: Employee[]; teams: Team[] }) {
   const [query, setQuery] = useState("");
-  const [dept, setDept] = useState<(typeof DEPARTMENTS)[number]>("All");
+  const [dept, setDept] = useState<DeptPill>("All");
+  const [status, setStatus] = useState<Employee["status"] | "All">("All");
+  const [employmentType, setEmploymentType] = useState<Employee["employmentType"] | "All">("All");
+  const [permission, setPermission] = useState<Employee["permission"] | "All">("All");
+  const [teamId, setTeamId] = useState("All");
+  const [sort, setSort] = useState<{ key: SortKey | null; dir: "asc" | "desc" }>({ key: null, dir: "asc" });
+
   const teamMap = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
-  const filtered = employees.filter((e) => {
-    if (dept !== "All" && e.department !== dept) return false;
-    if (query && !`${e.name} ${e.role}`.toLowerCase().includes(query.toLowerCase())) return false;
-    return true;
-  });
+  const teamOptions = useMemo(
+    () =>
+      [...teams]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((t) => ({ value: t.id, label: t.name })),
+    [teams]
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const rows = employees.filter((e) => {
+      if (dept !== "All" && e.department !== dept) return false;
+      if (status !== "All" && e.status !== status) return false;
+      if (employmentType !== "All" && e.employmentType !== employmentType) return false;
+      if (permission !== "All" && e.permission !== permission) return false;
+      if (teamId !== "All" && e.teamId !== teamId) return false;
+      if (q && !`${e.name} ${e.role} ${e.email} ${e.city}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+
+    if (!sort.key) return rows;
+    const key = sort.key;
+    const sorted = [...rows].sort((a, b) => {
+      switch (key) {
+        case "name":
+          return compareValues(a.name, b.name);
+        case "department":
+          return compareValues(a.department, b.department);
+        case "team":
+          return compareValues(teamMap.get(a.teamId ?? "")?.name, teamMap.get(b.teamId ?? "")?.name);
+        case "status":
+          return compareValues(a.status, b.status);
+        case "performance":
+          return a.performanceScore - b.performanceScore;
+        case "hireDate":
+          return new Date(a.hireDate).getTime() - new Date(b.hireDate).getTime();
+        default:
+          return 0;
+      }
+    });
+    return sort.dir === "asc" ? sorted : sorted.reverse();
+  }, [employees, dept, status, employmentType, permission, teamId, query, sort, teamMap]);
+
+  const hasFilters =
+    dept !== "All" || status !== "All" || employmentType !== "All" || permission !== "All" || teamId !== "All" || query !== "";
+
+  const clearAll = () => {
+    setDept("All");
+    setStatus("All");
+    setEmploymentType("All");
+    setPermission("All");
+    setTeamId("All");
+    setQuery("");
+  };
+
+  const onSort = (c: SortKey) => setSort((s) => nextSort(s, c));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {DEPARTMENTS.map((d) => (
-            <button
-              key={d}
-              onClick={() => setDept(d)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-[12.5px] font-medium whitespace-nowrap transition-colors",
-                dept === d ? "bg-navy-900 text-white" : "text-ink-500 hover:bg-ink-100"
-              )}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search employees…"
-            className="bg-white border border-ink-200 rounded-lg pl-8 pr-3 py-1.5 text-[12.5px] w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-          />
-        </div>
+        <FilterPills value={dept} options={DEPARTMENT_PILLS} onChange={setDept} />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search employees…" className="w-56" />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterSelect label="Status" value={status} options={EMPLOYEE_STATUSES} onChange={setStatus} allLabel="Any status" />
+        <FilterSelect
+          label="Employment type"
+          value={employmentType}
+          options={EMPLOYMENT_TYPES}
+          onChange={setEmploymentType}
+          allLabel="Any contract"
+        />
+        <FilterSelect label="Access level" value={permission} options={EMPLOYEE_PERMISSIONS} onChange={setPermission} allLabel="Any access" />
+        <FilterSelectPairs label="Team" value={teamId} options={teamOptions} onChange={setTeamId} allLabel="Any team" />
+        <ClearFiltersButton show={hasFilters} onClick={clearAll} />
+        <span className="ml-auto text-[12px] text-ink-400">
+          {filtered.length} of {employees.length} people
+        </span>
       </div>
 
       <div className="card-surface rounded-2xl overflow-hidden">
@@ -66,18 +139,19 @@ export function EmployeesTable({ employees, teams }: { employees: Employee[]; te
           <table className="w-full text-[12.5px]">
             <thead>
               <tr className="border-b border-ink-100 text-left text-ink-400 text-[11px] uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">Employee</th>
-                <th className="px-4 py-3 font-medium">Department</th>
-                <th className="px-4 py-3 font-medium">Team</th>
-                <th className="px-4 py-3 font-medium">Status</th>
+                <SortHeader column="name" label="Employee" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} className="px-5" />
+                <SortHeader column="department" label="Department" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="team" label="Team" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="status" label="Status" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
                 <th className="px-4 py-3 font-medium">Vacation</th>
                 <th className="px-4 py-3 font-medium">Payroll</th>
-                <th className="px-4 py-3 font-medium">Performance</th>
-                <th className="px-4 py-3 font-medium">Permission</th>
+                <SortHeader column="performance" label="Performance" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <th className="px-4 py-3 font-medium">Access</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 120).map((e) => (
+              {filtered.slice(0, 150).map((e) => (
                 <tr key={e.id} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/60 transition-colors">
                   <td className="px-5 py-2.5">
                     <Link href={`/employees/${e.id}`} className="flex items-center gap-2.5">
@@ -89,12 +163,39 @@ export function EmployeesTable({ employees, teams }: { employees: Employee[]; te
                     </Link>
                   </td>
                   <td className="px-4 py-2.5 text-ink-600 whitespace-nowrap">{e.department}</td>
-                  <td className="px-4 py-2.5 text-ink-500 whitespace-nowrap">{e.teamId ? teamMap.get(e.teamId)?.name.replace(/^Crew /, "") ?? "—" : "—"}</td>
-                  <td className="px-4 py-2.5"><Badge variant={STATUS_TONE[e.status]}>{e.status}</Badge></td>
-                  <td className="px-4 py-2.5 text-ink-500 whitespace-nowrap">{e.vacationUsed}/{e.vacationTotal} days</td>
-                  <td className="px-4 py-2.5"><Badge variant={PAYROLL_TONE[e.payrollStatus]}>{e.payrollStatus}</Badge></td>
+                  <td className="px-4 py-2.5 text-ink-500 whitespace-nowrap">
+                    {e.teamId ? teamMap.get(e.teamId)?.name.replace(/^Crew /, "") ?? "—" : "—"}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant={STATUS_TONE[e.status]}>{e.status}</Badge>
+                  </td>
+                  <td className="px-4 py-2.5 text-ink-500 whitespace-nowrap">
+                    {e.vacationUsed}/{e.vacationTotal} days
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant={PAYROLL_TONE[e.payrollStatus]}>{e.payrollStatus}</Badge>
+                  </td>
                   <td className="px-4 py-2.5 text-ink-700 font-medium">{e.performanceScore}/100</td>
-                  <td className="px-4 py-2.5"><Badge variant="neutral">{e.permission}</Badge></td>
+                  <td className="px-4 py-2.5">
+                    <Badge variant="neutral">{e.permission}</Badge>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2.5">
+                      <Link href={`/employees/${e.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Link>
+                      <ConfirmDeleteForm
+                        action={deleteEmployeeAction}
+                        fields={{ employeeId: e.id }}
+                        confirmMessage={`Remove ${e.name} from the directory? This cannot be undone.`}
+                        className="flex"
+                      >
+                        <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </ConfirmDeleteForm>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

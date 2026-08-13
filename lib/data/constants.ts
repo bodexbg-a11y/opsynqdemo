@@ -1,4 +1,17 @@
-import type { ProjectStatus, RiskLevel, TeamSpecialty, Client, TaskStatus, TaskPriority, EquipmentType, Equipment } from "./types";
+import type {
+  ProjectStatus,
+  RiskLevel,
+  TeamSpecialty,
+  Client,
+  TaskStatus,
+  TaskPriority,
+  EquipmentType,
+  Equipment,
+  EmployeeDepartment,
+  Employee,
+  SubTrade,
+  Subcontractor,
+} from "./types";
 
 export const TEAM_SPECIALTIES: TeamSpecialty[] = [
   "Framing",
@@ -39,6 +52,26 @@ export const EQUIPMENT_TYPES: EquipmentType[] = [
 ];
 
 export const EQUIPMENT_STATUSES: Equipment["status"][] = ["Available", "In Use", "Maintenance"];
+
+export const EMPLOYEE_DEPARTMENTS: EmployeeDepartment[] = [
+  "Construction",
+  "Management",
+  "Finance",
+  "Human Resources",
+  "Safety",
+  "Design",
+  "Procurement",
+];
+
+export const EMPLOYEE_STATUSES: Employee["status"][] = ["Active", "On Leave", "Vacation"];
+
+export const EMPLOYMENT_TYPES: Employee["employmentType"][] = ["Full-time", "Part-time", "Contract"];
+
+export const EMPLOYEE_PERMISSIONS: Employee["permission"][] = ["Admin", "Manager", "Employee"];
+
+export const SUB_TRADES: SubTrade[] = ["Electrical", "Roofing", "Concrete", "Painting", "Excavation", "Plumbing", "HVAC"];
+
+export const SUBCONTRACTOR_STATUSES: Subcontractor["status"][] = ["Active", "Inactive"];
 
 export const MATERIAL_CATEGORIES = [
   "Concrete",
