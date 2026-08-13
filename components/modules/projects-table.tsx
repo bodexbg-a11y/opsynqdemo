@@ -2,15 +2,31 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Search, ArrowUpRight } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import type { Project, Client, Employee } from "@/lib/data/types";
+import { PROJECT_CATEGORIES, RISK_LEVELS } from "@/lib/data/constants";
 import { ProjectStatusBadge, RiskBadge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Avatar } from "@/components/ui/avatar";
+import {
+  SearchInput,
+  FilterSelect,
+  FilterSelectPairs,
+  FilterPills,
+  ClearFiltersButton,
+  SortHeader,
+  nextSort,
+  compareValues,
+} from "@/components/ui/filter-bar";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { projectProfitability } from "@/lib/data/analytics";
 
 const STATUS_FILTERS = ["All", "In Progress", "Behind Schedule", "Planning", "On Hold", "Completed"] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number];
+
+type SortKey = "name" | "client" | "status" | "risk" | "progress" | "budget" | "profit" | "deadline";
+
+const RISK_ORDER: Record<string, number> = { Low: 0, Medium: 1, High: 2 };
 
 export function ProjectsTable({
   projects,
@@ -22,48 +38,113 @@ export function ProjectsTable({
   employees: Employee[];
 }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<(typeof STATUS_FILTERS)[number]>("All");
+  const [status, setStatus] = useState<StatusFilter>("All");
+  const [category, setCategory] = useState<(typeof PROJECT_CATEGORIES)[number] | "All">("All");
+  const [risk, setRisk] = useState<(typeof RISK_LEVELS)[number] | "All">("All");
+  const [clientId, setClientId] = useState("All");
+  const [pmId, setPmId] = useState("All");
+  const [sort, setSort] = useState<{ key: SortKey | null; dir: "asc" | "desc" }>({ key: null, dir: "asc" });
 
   const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients]);
   const employeeMap = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
 
+  // Only offer clients/PMs that actually appear in the visible project set, so the
+  // dropdowns never list an option that can only ever produce an empty table.
+  const clientOptions = useMemo(() => {
+    const ids = new Set(projects.map((p) => p.clientId));
+    return clients
+      .filter((c) => ids.has(c.id))
+      .map((c) => ({ value: c.id, label: c.company }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [projects, clients]);
+
+  const pmOptions = useMemo(() => {
+    const ids = new Set(projects.map((p) => p.projectManagerId));
+    return employees
+      .filter((e) => ids.has(e.id))
+      .map((e) => ({ value: e.id, label: e.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [projects, employees]);
+
   const filtered = useMemo(() => {
-    return projects.filter((p) => {
+    const q = query.trim().toLowerCase();
+    const rows = projects.filter((p) => {
       if (status !== "All" && p.status !== status) return false;
-      if (query && !`${p.name} ${clientMap.get(p.clientId)?.company ?? ""}`.toLowerCase().includes(query.toLowerCase())) return false;
+      if (category !== "All" && p.category !== category) return false;
+      if (risk !== "All" && p.riskLevel !== risk) return false;
+      if (clientId !== "All" && p.clientId !== clientId) return false;
+      if (pmId !== "All" && p.projectManagerId !== pmId) return false;
+      if (q) {
+        const haystack = `${p.name} ${p.city} ${p.state} ${p.category} ${clientMap.get(p.clientId)?.company ?? ""}`;
+        if (!haystack.toLowerCase().includes(q)) return false;
+      }
       return true;
     });
-  }, [projects, status, query, clientMap]);
+
+    if (!sort.key) return rows;
+    const key = sort.key;
+    const sorted = [...rows].sort((a, b) => {
+      switch (key) {
+        case "name":
+          return compareValues(a.name, b.name);
+        case "client":
+          return compareValues(clientMap.get(a.clientId)?.company, clientMap.get(b.clientId)?.company);
+        case "status":
+          return compareValues(a.status, b.status);
+        case "risk":
+          return RISK_ORDER[a.riskLevel] - RISK_ORDER[b.riskLevel];
+        case "progress":
+          return a.progress - b.progress;
+        case "budget":
+          return a.budget - b.budget;
+        case "profit":
+          return projectProfitability(a).profit - projectProfitability(b).profit;
+        case "deadline":
+          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+        default:
+          return 0;
+      }
+    });
+    return sort.dir === "asc" ? sorted : sorted.reverse();
+  }, [projects, status, category, risk, clientId, pmId, query, clientMap, sort]);
+
+  const hasFilters = status !== "All" || category !== "All" || risk !== "All" || clientId !== "All" || pmId !== "All" || query !== "";
+
+  const clearAll = () => {
+    setStatus("All");
+    setCategory("All");
+    setRisk("All");
+    setClientId("All");
+    setPmId("All");
+    setQuery("");
+  };
+
+  const statusCounts = useMemo(() => {
+    const counts: Partial<Record<StatusFilter, number>> = {};
+    for (const s of STATUS_FILTERS) {
+      if (s !== "All") counts[s] = projects.filter((p) => p.status === s).length;
+    }
+    return counts;
+  }, [projects]);
+
+  const onSort = (column: SortKey) => setSort((c) => nextSort(c, column));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 justify-between">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {STATUS_FILTERS.map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatus(s)}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-[12.5px] font-medium whitespace-nowrap transition-colors",
-                status === s ? "bg-navy-900 text-white" : "text-ink-500 hover:bg-ink-100"
-              )}
-            >
-              {s}
-              {s !== "All" && (
-                <span className="ml-1.5 text-[11px] opacity-70">{projects.filter((p) => p.status === s).length}</span>
-              )}
-            </button>
-          ))}
-        </div>
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 text-ink-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search projects…"
-            className="bg-white border border-ink-200 rounded-lg pl-8 pr-3 py-1.5 text-[12.5px] w-56 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400"
-          />
-        </div>
+        <FilterPills value={status} options={STATUS_FILTERS} onChange={setStatus} counts={statusCounts} />
+        <SearchInput value={query} onChange={setQuery} placeholder="Search projects…" className="w-56" />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterSelect label="Category" value={category} options={PROJECT_CATEGORIES} onChange={setCategory} allLabel="All categories" />
+        <FilterSelect label="Risk" value={risk} options={RISK_LEVELS} onChange={setRisk} allLabel="All risk levels" />
+        <FilterSelectPairs label="Client" value={clientId} options={clientOptions} onChange={setClientId} allLabel="All clients" />
+        <FilterSelectPairs label="Project Manager" value={pmId} options={pmOptions} onChange={setPmId} allLabel="All managers" />
+        <ClearFiltersButton show={hasFilters} onClick={clearAll} />
+        <span className="ml-auto text-[12px] text-ink-400">
+          {filtered.length} of {projects.length} projects
+        </span>
       </div>
 
       <div className="card-surface rounded-2xl overflow-hidden">
@@ -71,14 +152,14 @@ export function ProjectsTable({
           <table className="w-full text-[12.5px]">
             <thead>
               <tr className="border-b border-ink-100 text-left text-ink-400 text-[11px] uppercase tracking-wide">
-                <th className="px-5 py-3 font-medium">Project</th>
-                <th className="px-4 py-3 font-medium">Client</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Risk</th>
-                <th className="px-4 py-3 font-medium">Progress</th>
-                <th className="px-4 py-3 font-medium">Budget</th>
-                <th className="px-4 py-3 font-medium">Profit</th>
-                <th className="px-4 py-3 font-medium">Deadline</th>
+                <SortHeader column="name" label="Project" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} className="px-5" />
+                <SortHeader column="client" label="Client" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="status" label="Status" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="risk" label="Risk" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="progress" label="Progress" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="budget" label="Budget" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="profit" label="Profit" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
+                <SortHeader column="deadline" label="Deadline" sortKey={sort.key} sortDir={sort.dir} onSort={onSort} />
                 <th className="px-4 py-3 font-medium">PM</th>
               </tr>
             </thead>

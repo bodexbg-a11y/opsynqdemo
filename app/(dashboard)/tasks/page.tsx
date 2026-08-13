@@ -1,7 +1,7 @@
 import { getStore } from "@/lib/data/store";
 import { getCurrentUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/card";
-import { KanbanBoard } from "@/components/modules/kanban-board";
+import { TasksWorkspace } from "@/components/modules/tasks-workspace";
 
 export default async function TasksPage() {
   const user = await getCurrentUser();
@@ -18,11 +18,11 @@ export default async function TasksPage() {
         title="Task Management"
         subtitle={
           isAdmin
-            ? `${visibleTasks.length} tasks across all active job sites · drag cards to update status`
+            ? `${visibleTasks.length} tasks across all active job sites · filter by project, drag cards to update status`
             : `${visibleTasks.length} tasks across your assigned projects · drag cards to update status`
         }
       />
-      <KanbanBoard tasks={visibleTasks} employees={employees} projects={visibleProjects} />
+      <TasksWorkspace tasks={visibleTasks} employees={employees} projects={visibleProjects} canEdit />
     </div>
   );
 }

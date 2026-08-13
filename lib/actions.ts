@@ -16,11 +16,12 @@ import {
   TEAM_STATUSES,
   CLIENT_STATUSES,
   TASK_PRIORITIES,
+  TASK_STATUSES,
   EQUIPMENT_TYPES,
   EQUIPMENT_STATUSES,
   MATERIAL_CATEGORIES,
 } from "./data/constants";
-import type { Milestone, ActivityItem } from "./data/types";
+import type { Milestone, ActivityItem, TaskStatus, TaskPriority } from "./data/types";
 
 /** Finds a client by (case-insensitive) company name, or creates one. */
 async function resolveOrCreateClient(name: string): Promise<string> {
@@ -593,6 +594,134 @@ export async function deleteTaskAction(formData: FormData) {
   await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/tasks");
+}
+
+/** Looks up the task's owning project and enforces access against it. */
+async function requireTaskAccess(taskId: string) {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } });
+  if (!task) redirect("/tasks");
+  await requireProjectAccess(task.projectId);
+  return task;
+}
+
+/**
+ * Moves a task between Kanban columns. Called directly from the board on drop, so it
+ * takes plain arguments rather than FormData.
+ */
+export async function moveTaskStatusAction(taskId: string, status: string) {
+  const task = await requireTaskAccess(taskId);
+  const nextStatus = matchEnum(status, TASK_STATUSES, "To Do");
+
+  await prisma.task.update({ where: { id: taskId }, data: { status: nextStatus } });
+
+  const project = await prisma.project.findUnique({ where: { id: task.projectId } });
+  if (project) {
+    await prisma.project.update({
+      where: { id: task.projectId },
+      data: { activity: withActivity(project, `moved a task to ${nextStatus}`) },
+    });
+  }
+
+  revalidatePath("/tasks");
+  revalidatePath(`/projects/${task.projectId}`);
+}
+
+/** Creates a task from the Tasks workspace, where the project is chosen in the form. */
+export async function createTaskAction(formData: FormData) {
+  const projectId = String(formData.get("projectId") || "");
+  await requireProjectAccess(projectId);
+
+  const title = String(formData.get("title") || "").trim();
+  if (!title) redirect("/tasks?error=title");
+
+  const priority = matchEnum(String(formData.get("priority") || ""), TASK_PRIORITIES, "Medium");
+  const status = matchEnum(String(formData.get("status") || ""), TASK_STATUSES, "To Do");
+  const dueDate = parseDateOrDefault(String(formData.get("dueDate") || ""), new Date(Date.now() + 14 * 86400000));
+
+  const requestedAssigneeIds = formData.getAll("assigneeIds").map(String).filter(Boolean);
+  const validAssignees = requestedAssigneeIds.length
+    ? await prisma.employee.findMany({ where: { id: { in: requestedAssigneeIds } }, select: { id: true } })
+    : [];
+
+  const existingIds = await prisma.task.findMany({ select: { id: true } });
+  const id = nextEntityId("TSK", existingIds);
+
+  await prisma.task.create({
+    data: {
+      id,
+      title,
+      description: String(formData.get("description") || "").trim(),
+      projectId,
+      status,
+      priority,
+      assigneeIds: validAssignees.map((e) => e.id),
+      dueDate,
+      createdDate: new Date(),
+      attachments: 0,
+      comments: 0,
+      tags: formData.getAll("tags").map(String).filter(Boolean),
+    },
+  });
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (project) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { activity: withActivity(project, `added a new task: "${title}"`) },
+    });
+  }
+
+  revalidatePath("/tasks");
+  revalidatePath(`/projects/${projectId}`);
+  redirect("/tasks?created=1");
+}
+
+/** Edits an existing task in place from the Tasks workspace. */
+export async function updateTaskAction(formData: FormData) {
+  const taskId = String(formData.get("taskId") || "");
+  await requireTaskAccess(taskId);
+
+  const task = await prisma.task.findUnique({ where: { id: taskId } });
+  if (!task) redirect("/tasks");
+
+  // Reassigning to a different project is allowed, but only to one the user can reach.
+  const requestedProjectId = String(formData.get("projectId") || "");
+  let projectId = task.projectId;
+  if (requestedProjectId && requestedProjectId !== task.projectId) {
+    await requireProjectAccess(requestedProjectId);
+    projectId = requestedProjectId;
+  }
+
+  const requestedAssigneeIds = formData.getAll("assigneeIds").map(String).filter(Boolean);
+  const validAssignees = requestedAssigneeIds.length
+    ? await prisma.employee.findMany({ where: { id: { in: requestedAssigneeIds } }, select: { id: true } })
+    : [];
+
+  await prisma.task.update({
+    where: { id: taskId },
+    data: {
+      title: String(formData.get("title") || "").trim() || task.title,
+      description: String(formData.get("description") || "").trim(),
+      projectId,
+      status: matchEnum(String(formData.get("status") || ""), TASK_STATUSES, task.status as TaskStatus),
+      priority: matchEnum(String(formData.get("priority") || ""), TASK_PRIORITIES, task.priority as TaskPriority),
+      assigneeIds: validAssignees.map((e) => e.id),
+      dueDate: parseDateOrDefault(String(formData.get("dueDate") || ""), task.dueDate),
+    },
+  });
+
+  revalidatePath("/tasks");
+  revalidatePath(`/projects/${projectId}`);
+  redirect("/tasks?updated=1");
+}
+
+/** Deletes a task from the Tasks workspace (project id resolved server-side). */
+export async function deleteTaskByIdAction(formData: FormData) {
+  const taskId = String(formData.get("taskId") || "");
+  const task = await requireTaskAccess(taskId);
+  await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
+  revalidatePath("/tasks");
+  revalidatePath(`/projects/${task.projectId}`);
 }
 
 export async function createEquipmentAction(formData: FormData) {
