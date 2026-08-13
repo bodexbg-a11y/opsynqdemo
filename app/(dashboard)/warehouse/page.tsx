@@ -1,100 +1,55 @@
 import Link from "next/link";
 import { getStore } from "@/lib/data/store";
 import { getCurrentUser } from "@/lib/auth";
-import { deleteMaterialAction } from "@/lib/actions";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ProgressBar } from "@/components/ui/progress-bar";
-import { ConfirmDeleteForm } from "@/components/modules/confirm-delete-form";
+import { MaterialsTable } from "@/components/modules/materials-table";
+import { WarehousesGrid } from "@/components/modules/warehouses-grid";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { QrCode, Star, Plus, Pencil, Trash2 } from "lucide-react";
+import { Star, Plus, Warehouse as WarehouseIcon } from "lucide-react";
 
 export default async function WarehousePage() {
   const user = await getCurrentUser();
   const isAdmin = user?.role === "Admin";
-  const { materials, suppliers, purchaseOrders } = await getStore();
+  const { materials, suppliers, purchaseOrders, warehouses } = await getStore();
   const lowStock = materials.filter((m) => m.quantity < m.reorderLevel);
 
   return (
     <div className="space-y-5 pb-10">
       <PageHeader
         title="Warehouse"
-        subtitle={`${materials.length} SKUs tracked · ${lowStock.length} below reorder level`}
+        subtitle={`${warehouses.length} sites · ${materials.length} SKUs tracked · ${lowStock.length} below reorder level`}
         action={
           isAdmin ? (
-            <Link
-              href="/warehouse/materials/new"
-              className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
-            >
-              <Plus className="w-4 h-4" />
-              New Material
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/warehouse/sites/new"
+                className="flex items-center gap-1.5 text-[13px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+              >
+                <WarehouseIcon className="w-4 h-4" />
+                New Warehouse
+              </Link>
+              <Link
+                href="/warehouse/materials/new"
+                className="flex items-center gap-1.5 text-[13px] font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 transition-colors shadow-sm shadow-blue-600/20"
+              >
+                <Plus className="w-4 h-4" />
+                New Material
+              </Link>
+            </div>
           ) : undefined
         }
       />
       <Tabs
         tabs={[
           {
+            label: "Warehouses",
+            content: <WarehousesGrid warehouses={warehouses} materials={materials} isAdmin={isAdmin} />,
+          },
+          {
             label: "Materials & Inventory",
-            content: (
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[12.5px]">
-                    <thead>
-                      <tr className="border-b border-ink-100 text-left text-ink-400 text-[11px] uppercase tracking-wide">
-                        <th className="px-5 py-3 font-medium">Material</th>
-                        <th className="px-4 py-3 font-medium">Category</th>
-                        <th className="px-4 py-3 font-medium">Stock Level</th>
-                        <th className="px-4 py-3 font-medium">Location</th>
-                        <th className="px-4 py-3 font-medium">Unit Cost</th>
-                        <th className="px-4 py-3 font-medium">QR</th>
-                        <th className="px-4 py-3 font-medium"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {materials.map((m) => {
-                        const low = m.quantity < m.reorderLevel;
-                        const pct = Math.min(100, (m.quantity / (m.reorderLevel * 2)) * 100);
-                        return (
-                          <tr key={m.id} className="border-b border-ink-50 last:border-0 hover:bg-ink-50/60 transition-colors">
-                            <td className="px-5 py-3">
-                              <p className="font-medium text-ink-800">{m.name}</p>
-                              <p className="text-ink-400 text-[11px]">{m.sku}</p>
-                            </td>
-                            <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{m.category}</td>
-                            <td className="px-4 py-3 min-w-[160px]">
-                              <div className="flex items-center gap-2">
-                                <ProgressBar value={pct} tone={low ? "danger" : "success"} className="w-24" />
-                                <span className={low ? "text-danger-500 font-medium" : "text-ink-500"}>{m.quantity} {m.unit}</span>
-                              </div>
-                              {low && <Badge variant="danger" className="mt-1">Reorder</Badge>}
-                            </td>
-                            <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{m.warehouseLocation}</td>
-                            <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{formatCurrency(m.unitCost)}</td>
-                            <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{m.qrCode}</span></td>
-                            <td className="px-4 py-3">
-                              {isAdmin && (
-                                <div className="flex items-center gap-2.5">
-                                  <Link href={`/warehouse/materials/${m.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Link>
-                                  <ConfirmDeleteForm action={deleteMaterialAction} fields={{ materialId: m.id }} confirmMessage={`Delete "${m.name}"?`}>
-                                    <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </ConfirmDeleteForm>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-            ),
+            content: <MaterialsTable materials={materials} suppliers={suppliers} warehouses={warehouses} isAdmin={isAdmin} />,
           },
           {
             label: "Suppliers",
@@ -133,11 +88,19 @@ export default async function WarehousePage() {
                       <div key={po.id} className="flex items-center gap-3 px-5 py-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-[13px] font-medium text-ink-800">{material?.name}</p>
-                          <p className="text-[11.5px] text-ink-400">{supplier?.name} · Ordered {formatDate(po.orderDate)}</p>
+                          <p className="text-[11.5px] text-ink-400">
+                            {supplier?.name} · Ordered {formatDate(po.orderDate)}
+                          </p>
                         </div>
-                        <span className="text-[12.5px] text-ink-600">{po.quantity} {material?.unit}</span>
-                        <span className="text-[12.5px] font-medium text-ink-800 w-20 text-right">{formatCurrency(po.total, { compact: true })}</span>
-                        <Badge variant={po.status === "Delivered" ? "success" : po.status === "Pending" ? "warning" : "blue"}>{po.status}</Badge>
+                        <span className="text-[12.5px] text-ink-600">
+                          {po.quantity} {material?.unit}
+                        </span>
+                        <span className="text-[12.5px] font-medium text-ink-800 w-20 text-right">
+                          {formatCurrency(po.total, { compact: true })}
+                        </span>
+                        <Badge variant={po.status === "Delivered" ? "success" : po.status === "Pending" ? "warning" : "blue"}>
+                          {po.status}
+                        </Badge>
                       </div>
                     );
                   })}

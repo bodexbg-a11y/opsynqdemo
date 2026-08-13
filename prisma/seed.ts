@@ -62,6 +62,32 @@ async function ensureDemoUsers(pmEmployee?: { id: string; name: string }) {
   }
 }
 
+/**
+ * Backfills the warehouse network on databases seeded before warehouses existed.
+ * Without this, an existing deployment would show an empty Warehouses tab and every
+ * material stuck as "unassigned", since the main seed is skipped once data is present.
+ */
+async function ensureWarehouses(store: ReturnType<typeof generateStore>) {
+  const existing = await prisma.warehouse.count();
+  if (existing > 0) return;
+
+  console.log(`Backfilling ${store.warehouses.length} warehouses…`);
+  await prisma.warehouse.createMany({ data: asInput<Prisma.WarehouseCreateManyInput>(store.warehouses) });
+
+  // Spread the materials that predate this change across the new sites, so the
+  // capacity/stock rollups on each warehouse card have something real to show.
+  const orphaned = await prisma.material.findMany({ where: { warehouseId: null }, select: { id: true } });
+  await Promise.all(
+    orphaned.map((m, i) =>
+      prisma.material.update({
+        where: { id: m.id },
+        data: { warehouseId: store.warehouses[i % store.warehouses.length].id },
+      })
+    )
+  );
+  console.log(`Assigned ${orphaned.length} existing materials to warehouses.`);
+}
+
 async function main() {
   // Safe to run on every deploy: only seeds an empty database. Real demo activity
   // (projects created/edited/deleted through the app) is never touched or wiped —
@@ -70,6 +96,7 @@ async function main() {
   if (existingCount > 0 && process.env.FORCE_SEED !== "true") {
     console.log(`Database already has ${existingCount} projects — skipping seed. Set FORCE_SEED=true to reset.`);
     await ensureDemoUsers();
+    await ensureWarehouses(generateStore(1337));
     return;
   }
 
@@ -86,6 +113,7 @@ async function main() {
     prisma.appNotification.deleteMany(),
     prisma.equipment.deleteMany(),
     prisma.material.deleteMany(),
+    prisma.warehouse.deleteMany(),
     prisma.subcontractor.deleteMany(),
     prisma.supplier.deleteMany(),
     prisma.team.deleteMany(),
@@ -123,6 +151,9 @@ async function main() {
 
   console.log(`Seeding ${store.equipment.length} equipment…`);
   await prisma.equipment.createMany({ data: asInput<Prisma.EquipmentCreateManyInput>(store.equipment) });
+
+  console.log(`Seeding ${store.warehouses.length} warehouses…`);
+  await prisma.warehouse.createMany({ data: asInput<Prisma.WarehouseCreateManyInput>(store.warehouses) });
 
   console.log(`Seeding ${store.materials.length} materials…`);
   await prisma.material.createMany({ data: asInput<Prisma.MaterialCreateManyInput>(store.materials) });

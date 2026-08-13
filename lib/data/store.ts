@@ -11,6 +11,7 @@ import type {
   Subcontractor,
   Equipment,
   Supplier,
+  Warehouse,
   Material,
   PurchaseOrder,
   DocumentItem,
@@ -38,6 +39,7 @@ export async function getStore(): Promise<Store> {
     contractRows,
     subcontractorRows,
     equipmentRows,
+    warehouseRows,
     materialRows,
     supplierRows,
     purchaseOrderRows,
@@ -54,6 +56,7 @@ export async function getStore(): Promise<Store> {
     prisma.contract.findMany({ orderBy: { id: "asc" } }),
     prisma.subcontractor.findMany({ orderBy: { id: "asc" } }),
     prisma.equipment.findMany({ orderBy: { id: "asc" } }),
+    prisma.warehouse.findMany({ orderBy: { id: "asc" } }),
     prisma.material.findMany({ orderBy: { id: "asc" } }),
     prisma.supplier.findMany({ orderBy: { id: "asc" } }),
     prisma.purchaseOrder.findMany({ orderBy: { id: "asc" } }),
@@ -138,6 +141,7 @@ export async function getStore(): Promise<Store> {
     status: json(e.status),
   }));
 
+  const warehouses: Warehouse[] = warehouseRows.map((w) => ({ ...w }));
   const materials: Material[] = materialRows.map((m) => ({ ...m }));
 
   const suppliers: Supplier[] = supplierRows.map((s) => ({ ...s }));
@@ -184,6 +188,7 @@ export async function getStore(): Promise<Store> {
     contracts,
     subcontractors,
     equipment,
+    warehouses,
     materials,
     suppliers,
     purchaseOrders,

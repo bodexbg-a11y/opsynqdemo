@@ -1037,6 +1037,63 @@ export async function deleteEquipmentAction(formData: FormData) {
   redirect("/equipment");
 }
 
+/* ── Warehouses ────────────────────────────────────────────────────────────── */
+
+function warehouseFieldsFromForm(formData: FormData) {
+  return {
+    name: String(formData.get("name") || "").trim(),
+    code: String(formData.get("code") || "").trim().toUpperCase(),
+    address: String(formData.get("address") || "").trim(),
+    city: String(formData.get("city") || "").trim(),
+    state: String(formData.get("state") || "").trim(),
+    manager: String(formData.get("manager") || "").trim(),
+    capacity: parseNumber(String(formData.get("capacity") || ""), 500),
+    notes: String(formData.get("notes") || "").trim(),
+  };
+}
+
+export async function createWarehouseAction(formData: FormData) {
+  await requireAdmin();
+  const fields = warehouseFieldsFromForm(formData);
+  if (!fields.name) redirect("/warehouse/sites/new?error=name");
+
+  const existingIds = await prisma.warehouse.findMany({ select: { id: true } });
+  const id = nextEntityId("WH", existingIds);
+
+  await prisma.warehouse.create({
+    data: { id, ...fields, code: fields.code || id.replace("-", "") },
+  });
+
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
+}
+
+export async function updateWarehouseAction(formData: FormData) {
+  await requireAdmin();
+  const warehouseId = String(formData.get("warehouseId") || "");
+  const existing = await prisma.warehouse.findUnique({ where: { id: warehouseId } });
+  if (!existing) redirect("/warehouse");
+
+  const fields = warehouseFieldsFromForm(formData);
+  await prisma.warehouse.update({
+    where: { id: warehouseId },
+    data: { ...fields, name: fields.name || existing.name, code: fields.code || existing.code },
+  });
+
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
+}
+
+export async function deleteWarehouseAction(formData: FormData) {
+  await requireAdmin();
+  const warehouseId = String(formData.get("warehouseId") || "");
+  // Materials survive the warehouse being removed — the schema nulls their warehouseId,
+  // leaving them visible as unassigned stock rather than silently disappearing.
+  await prisma.warehouse.delete({ where: { id: warehouseId } }).catch(() => {});
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
+}
+
 export async function createMaterialAction(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") || "").trim() || "New Material";
@@ -1050,12 +1107,29 @@ export async function createMaterialAction(formData: FormData) {
   const supplierExists = requestedSupplierId && (await prisma.supplier.findUnique({ where: { id: requestedSupplierId }, select: { id: true } }));
   const supplierId = supplierExists ? requestedSupplierId : (await prisma.supplier.findFirst({ orderBy: { id: "asc" }, select: { id: true } }))?.id ?? "";
 
+  const requestedWarehouseId = String(formData.get("warehouseId") || "").trim();
+  const warehouseExists =
+    requestedWarehouseId && (await prisma.warehouse.findUnique({ where: { id: requestedWarehouseId }, select: { id: true } }));
+
   const existingIds = await prisma.material.findMany({ select: { id: true } });
   const id = nextEntityId("MAT", existingIds);
   const suffix = id.split("-")[1].padStart(5, "0");
 
   await prisma.material.create({
-    data: { id, name, category, sku: `SKU-${suffix}`, quantity, unit, reorderLevel, warehouseLocation, supplierId, unitCost, qrCode: `QR-MAT-${suffix}` },
+    data: {
+      id,
+      name,
+      category,
+      sku: `SKU-${suffix}`,
+      quantity,
+      unit,
+      reorderLevel,
+      warehouseLocation,
+      warehouseId: warehouseExists ? requestedWarehouseId : null,
+      supplierId,
+      unitCost,
+      qrCode: `QR-MAT-${suffix}`,
+    },
   });
 
   revalidatePath("/warehouse");
@@ -1073,6 +1147,10 @@ export async function updateMaterialAction(formData: FormData) {
   const requestedSupplierId = String(formData.get("supplierId") || "");
   const supplierExists = requestedSupplierId && (await prisma.supplier.findUnique({ where: { id: requestedSupplierId }, select: { id: true } }));
 
+  const requestedWarehouseId = String(formData.get("warehouseId") || "").trim();
+  const warehouseExists =
+    requestedWarehouseId && (await prisma.warehouse.findUnique({ where: { id: requestedWarehouseId }, select: { id: true } }));
+
   await prisma.material.update({
     where: { id: materialId },
     data: {
@@ -1083,6 +1161,7 @@ export async function updateMaterialAction(formData: FormData) {
       reorderLevel: parseNumber(String(formData.get("reorderLevel") || ""), material.reorderLevel),
       unitCost: parseNumber(String(formData.get("unitCost") || ""), material.unitCost),
       warehouseLocation: String(formData.get("warehouseLocation") || "").trim() || material.warehouseLocation,
+      warehouseId: warehouseExists ? requestedWarehouseId : null,
       ...(supplierExists ? { supplierId: requestedSupplierId } : {}),
     },
   });

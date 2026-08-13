@@ -3,16 +3,16 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { requireAdmin } from "@/lib/auth";
-import { updateMaterialAction } from "@/lib/actions";
+import { updateWarehouseAction } from "@/lib/actions";
 import { PageHeader } from "@/components/ui/card";
-import { MaterialForm } from "@/components/modules/material-form";
+import { WarehouseForm } from "@/components/modules/warehouse-form";
 
-export default async function EditMaterialPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditWarehousePage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await params;
-  const { materials, suppliers, warehouses } = await getStore();
-  const material = materials.find((m) => m.id === id);
-  if (!material) notFound();
+  const { warehouses, employees } = await getStore();
+  const warehouse = warehouses.find((w) => w.id === id);
+  if (!warehouse) notFound();
 
   return (
     <div className="space-y-5 pb-10 max-w-2xl">
@@ -21,10 +21,16 @@ export default async function EditMaterialPage({ params }: { params: Promise<{ i
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to Warehouse
         </Link>
-        <PageHeader title="Edit Material" subtitle={material.name} />
+        <PageHeader title="Edit Warehouse" subtitle={warehouse.name} />
       </div>
 
-      <MaterialForm action={updateMaterialAction} material={material} suppliers={suppliers} warehouses={warehouses} cancelHref="/warehouse" submitLabel="Save Changes" />
+      <WarehouseForm
+        action={updateWarehouseAction}
+        warehouse={warehouse}
+        employees={employees}
+        cancelHref="/warehouse"
+        submitLabel="Save Changes"
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Material, Supplier } from "@/lib/data/types";
+import type { Material, Supplier, Warehouse } from "@/lib/data/types";
 import { MATERIAL_CATEGORIES } from "@/lib/data/constants";
 import { Card } from "@/components/ui/card";
 import { FormField, FormSection, inputClass, selectClass } from "@/components/ui/form";
@@ -8,12 +8,14 @@ export function MaterialForm({
   action,
   material,
   suppliers,
+  warehouses,
   cancelHref,
   submitLabel,
 }: {
   action: (formData: FormData) => Promise<void>;
   material?: Material;
   suppliers: Supplier[];
+  warehouses: Warehouse[];
   cancelHref: string;
   submitLabel: string;
 }) {
@@ -51,7 +53,18 @@ export function MaterialForm({
             </select>
           </FormField>
 
-          <FormField label="Warehouse Location">
+          <FormField label="Warehouse">
+            <select name="warehouseId" defaultValue={material?.warehouseId ?? ""} className={selectClass}>
+              <option value="">— Unassigned —</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} ({w.code})
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <FormField label="Bin Location" hint="Aisle and bin inside the warehouse">
             <input name="warehouseLocation" defaultValue={material?.warehouseLocation} placeholder="Aisle 1 - Bin A1" className={inputClass} />
           </FormField>
         </FormSection>

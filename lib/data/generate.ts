@@ -10,6 +10,7 @@ import type {
   Subcontractor,
   Equipment,
   Supplier,
+  Warehouse,
   Material,
   PurchaseOrder,
   DocumentItem,
@@ -276,6 +277,7 @@ export interface Store {
   contracts: Contract[];
   subcontractors: Subcontractor[];
   equipment: Equipment[];
+  warehouses: Warehouse[];
   materials: Material[];
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
@@ -722,6 +724,32 @@ export function generateStore(seed = 1337): Store {
     ordersCount: faker.number.int({ min: 5, max: 240 }),
   }));
 
+  // ---------- Warehouses ----------
+  const WAREHOUSE_SITES = [
+    { name: "Central Distribution Yard", code: "CDY", city: "Denver", state: "CO" },
+    { name: "North Ridge Depot", code: "NRD", city: "Fort Collins", state: "CO" },
+    { name: "Southside Materials Hub", code: "SMH", city: "Colorado Springs", state: "CO" },
+    { name: "Westgate Storage Facility", code: "WSF", city: "Grand Junction", state: "CO" },
+    { name: "Airport Logistics Center", code: "ALC", city: "Aurora", state: "CO" },
+  ];
+  const warehouses: Warehouse[] = WAREHOUSE_SITES.map((site, i) => ({
+    id: id("WH", i + 1),
+    name: site.name,
+    code: site.code,
+    address: faker.location.streetAddress(),
+    city: site.city,
+    state: site.state,
+    manager: rand(employees).name,
+    capacity: faker.number.int({ min: 400, max: 2400 }),
+    notes: rand([
+      "Climate-controlled bays for finishing materials.",
+      "Primary receiving site for bulk aggregate deliveries.",
+      "Overflow storage — staffed weekdays only.",
+      "Secure cage for high-value electrical and tooling.",
+      "Direct rail access for steel shipments.",
+    ]),
+  }));
+
   // ---------- Materials ----------
   const materials: Material[] = Array.from({ length: COUNTS.materials }, (_, i) => {
     const cat = MATERIAL_CATALOG[i % MATERIAL_CATALOG.length];
@@ -736,6 +764,7 @@ export function generateStore(seed = 1337): Store {
       unit: cat.unit,
       reorderLevel,
       warehouseLocation: `Aisle ${faker.number.int({ min: 1, max: 12 })} - Bin ${faker.string.alpha({ length: 1, casing: "upper" })}${faker.number.int({ min: 1, max: 40 })}`,
+      warehouseId: rand(warehouses).id,
       supplierId: rand(suppliers).id,
       unitCost: cat.cost,
       qrCode: `QR-MAT-${pad(i + 1, 5)}`,
@@ -926,6 +955,7 @@ export function generateStore(seed = 1337): Store {
     contracts,
     subcontractors,
     equipment,
+    warehouses,
     materials,
     suppliers,
     purchaseOrders,

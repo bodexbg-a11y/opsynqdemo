@@ -219,6 +219,20 @@ model Supplier {
   ordersCount Int
 }
 
+model Warehouse {
+  id       String @id
+  name     String
+  code     String
+  address  String
+  city     String
+  state    String
+  manager  String
+  capacity Int
+  notes    String
+
+  materials Material[]
+}
+
 model Material {
   id                String @id
   name              String
@@ -228,9 +242,14 @@ model Material {
   unit              String
   reorderLevel      Int
   warehouseLocation String
+  warehouseId       String?
   supplierId        String
   unitCost          Float
   qrCode            String
+
+  warehouse Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+
+  @@index([warehouseId])
 }
 
 model PurchaseOrder {

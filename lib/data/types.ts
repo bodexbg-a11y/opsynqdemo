@@ -244,6 +244,19 @@ export interface Supplier {
   ordersCount: number;
 }
 
+export interface Warehouse {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  city: string;
+  state: string;
+  manager: string;
+  /** Storage capacity in pallet positions. */
+  capacity: number;
+  notes: string;
+}
+
 export interface Material {
   id: string;
   name: string;
@@ -252,7 +265,9 @@ export interface Material {
   quantity: number;
   unit: string;
   reorderLevel: number;
+  /** Bin/aisle within the warehouse, e.g. "Aisle 3 - Bin C2". */
   warehouseLocation: string;
+  warehouseId: string | null;
   supplierId: string;
   unitCost: number;
   qrCode: string;
