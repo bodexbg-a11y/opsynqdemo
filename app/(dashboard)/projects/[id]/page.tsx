@@ -16,6 +16,7 @@ import {
   Upload,
   Plus,
   Trash2,
+  Camera,
 } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { getCurrentUser } from "@/lib/auth";
@@ -53,6 +54,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const projectInvoices = invoices.filter((iv) => iv.projectId === project.id);
   const projectContracts = contracts.filter((c) => c.projectId === project.id);
   const { profit, margin } = projectProfitability(project);
+  const heroPhoto = project.photos[0];
   const crewEmployees = projectTeams.flatMap((t) => employees.filter((e) => e.teamId === t.id));
   const memberNames = crewEmployees.map((e) => e.name);
 
@@ -61,8 +63,52 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       {/* Header */}
       <Card className="p-6 relative overflow-hidden">
         <div className="pointer-events-none absolute right-0 top-0 w-64 h-64 bg-blue-500/[0.04] rounded-full blur-3xl -mr-20 -mt-20" />
+
+        {/* Site photo bleeding in from the right edge, faded into the card so it
+            reads as atmosphere behind the header rather than a separate image. */}
+        {heroPhoto && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-[42%] hidden lg:block" aria-hidden="true">
+            <Image src={heroPhoto} alt="" fill sizes="600px" className="object-cover" unoptimized />
+            <div className="absolute inset-0 bg-gradient-to-r from-white via-white/94 to-white/78" />
+          </div>
+        )}
+
+        <div className="relative z-10">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          {/* flex-1 + min-w-0 lets the meta line wrap inside this block instead of
+              pushing the action buttons onto their own row. */}
+          <div className="flex items-start gap-4 min-w-0 flex-1">
+            {/* Thumbnail doubles as the entry point to the full gallery. */}
+            <Link
+              href={`/projects/${project.id}?tab=Gallery`}
+              title={heroPhoto ? "View site gallery" : "Upload site photos"}
+              className="group relative w-[84px] h-[84px] rounded-xl overflow-hidden shrink-0 ring-1 ring-ink-200/80 shadow-sm hidden sm:block bg-ink-100"
+            >
+              {heroPhoto ? (
+                <>
+                  <Image
+                    src={heroPhoto}
+                    alt=""
+                    fill
+                    sizes="84px"
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    unoptimized
+                  />
+                  {project.photos.length > 1 && (
+                    <span className="absolute inset-x-0 bottom-0 bg-navy-900/70 text-white text-[10px] font-medium text-center py-0.5">
+                      +{project.photos.length - 1}
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="w-full h-full flex flex-col items-center justify-center gap-1 text-ink-400 group-hover:text-blue-600 transition-colors">
+                  <Camera className="w-5 h-5" />
+                  <span className="text-[9.5px] font-medium">Add photo</span>
+                </span>
+              )}
+            </Link>
+
+            <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-[20px] font-semibold text-ink-900 tracking-tight">{project.name}</h1>
               <ProjectStatusSelect projectId={project.id} status={project.status} />
@@ -72,6 +118,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{project.address}, {project.city}, {project.state}</span>
               <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(project.startDate)} – {formatDate(project.deadline)}</span>
               <span>Client: <span className="text-ink-700 font-medium">{client?.company}</span></span>
+            </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -138,6 +185,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <span className="text-[12px] font-medium text-ink-700">{project.progress}%</span>
             </div>
           </div>
+        </div>
         </div>
       </Card>
 
