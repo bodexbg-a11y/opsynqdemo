@@ -22,6 +22,46 @@ function asInput<T>(rows: unknown[]): T[] {
   return rows as T[];
 }
 
+const DEMO_PASSWORD = "opsynq2026";
+
+/**
+ * Ensures the two demo logins exist, independent of whether the rest of the demo data
+ * was (re)seeded this run. Runs on every deploy via upsert, so it's safe to call even
+ * when the project/employee tables already have real, edited-through-the-app data.
+ */
+async function ensureDemoUsers(pmEmployee?: { id: string; name: string }) {
+  console.log("Ensuring demo login accounts exist…");
+  await prisma.user.upsert({
+    where: { email: "admin@opsynq.demo" },
+    update: {},
+    create: {
+      name: "Vlad Mesaros",
+      email: "admin@opsynq.demo",
+      passwordHash: hashPassword(DEMO_PASSWORD),
+      role: "Admin",
+    },
+  });
+
+  const pm =
+    pmEmployee ??
+    (await prisma.employee.findFirst({ where: { role: "Project Manager" }, select: { id: true, name: true } })) ??
+    (await prisma.employee.findFirst({ orderBy: { id: "asc" }, select: { id: true, name: true } }));
+
+  if (pm) {
+    await prisma.user.upsert({
+      where: { email: "manager@opsynq.demo" },
+      update: {},
+      create: {
+        name: pm.name,
+        email: "manager@opsynq.demo",
+        passwordHash: hashPassword(DEMO_PASSWORD),
+        role: "ProjectManager",
+        employeeId: pm.id,
+      },
+    });
+  }
+}
+
 async function main() {
   // Safe to run on every deploy: only seeds an empty database. Real demo activity
   // (projects created/edited/deleted through the app) is never touched or wiped —
@@ -29,6 +69,7 @@ async function main() {
   const existingCount = await prisma.project.count();
   if (existingCount > 0 && process.env.FORCE_SEED !== "true") {
     console.log(`Database already has ${existingCount} projects — skipping seed. Set FORCE_SEED=true to reset.`);
+    await ensureDemoUsers();
     return;
   }
 
@@ -98,33 +139,8 @@ async function main() {
   console.log(`Seeding ${store.adCampaigns.length} ad campaigns…`);
   await prisma.adCampaign.createMany({ data: asInput<Prisma.AdCampaignCreateManyInput>(store.adCampaigns) });
 
-  console.log("Seeding demo login accounts…");
-  const DEMO_PASSWORD = "opsynq2026";
-  await prisma.user.upsert({
-    where: { email: "admin@opsynq.demo" },
-    update: {},
-    create: {
-      name: "Vlad Mesaros",
-      email: "admin@opsynq.demo",
-      passwordHash: hashPassword(DEMO_PASSWORD),
-      role: "Admin",
-    },
-  });
-
   const pmEmployee = store.employees.find((e) => e.role === "Project Manager") ?? store.employees[0];
-  if (pmEmployee) {
-    await prisma.user.upsert({
-      where: { email: "manager@opsynq.demo" },
-      update: {},
-      create: {
-        name: pmEmployee.name,
-        email: "manager@opsynq.demo",
-        passwordHash: hashPassword(DEMO_PASSWORD),
-        role: "ProjectManager",
-        employeeId: pmEmployee.id,
-      },
-    });
-  }
+  await ensureDemoUsers(pmEmployee ? { id: pmEmployee.id, name: pmEmployee.name } : undefined);
 
   console.log("Done.");
 }
