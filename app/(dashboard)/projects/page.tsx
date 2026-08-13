@@ -3,7 +3,7 @@ import { Plus, Upload, Download } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { getCurrentUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/card";
-import { ProjectsTable } from "@/components/modules/projects-table";
+import { ProjectsView } from "@/components/modules/projects-view";
 
 export default async function ProjectsPage() {
   const user = await getCurrentUser();
@@ -44,7 +44,7 @@ export default async function ProjectsPage() {
           ) : undefined
         }
       />
-      <ProjectsTable projects={visibleProjects} clients={clients} employees={employees} />
+      <ProjectsView projects={visibleProjects} clients={clients} employees={employees} />
     </div>
   );
 }
