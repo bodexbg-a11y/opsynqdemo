@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, Upload } from "lucide-react";
+import { Plus, Upload, Download } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { PageHeader } from "@/components/ui/card";
 import { ProjectsTable } from "@/components/modules/projects-table";
@@ -13,6 +13,13 @@ export default async function ProjectsPage() {
         subtitle={`${projects.length} projects across every active job site`}
         action={
           <div className="flex items-center gap-2">
+            <a
+              href="/api/export/projects"
+              className="flex items-center gap-1.5 text-[13px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </a>
             <Link
               href="/import?type=projects"
               className="flex items-center gap-1.5 text-[13px] font-medium bg-white border border-ink-200 hover:bg-ink-50 text-ink-700 rounded-lg px-3 py-2 transition-colors"

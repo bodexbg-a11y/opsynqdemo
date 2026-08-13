@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   description: "The complete Business Operating System for construction companies.",
 };
 
+// Every page reads live data from Postgres — never statically prerender at build time.
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const { notifications } = await getStore();
   const unreadCount = notifications.filter((n) => !n.read).length;

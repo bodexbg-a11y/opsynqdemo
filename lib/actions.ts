@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import ExcelJS from "exceljs";
-import { getStore } from "./data/store";
+import { Prisma } from "@prisma/client";
+import { prisma } from "./db";
 import { nextEntityId } from "./data/ids";
-import { addEntity, patchEntity, writeOverlay, type Overlay } from "./data/overlay";
 import { normalizeHeader, pick, cellToString, parseNumber, parseDateOrDefault, matchEnum } from "./data/import-helpers";
 import {
   PROJECT_CATEGORIES,
@@ -19,35 +19,42 @@ import {
   EQUIPMENT_STATUSES,
   MATERIAL_CATEGORIES,
 } from "./data/constants";
-import type { Project, Team, Client, Milestone, ActivityItem, Task, Equipment, Material } from "./data/types";
+import type { Milestone, ActivityItem } from "./data/types";
 
-/** Finds a client by name in `clientsPool`, or creates one and records it in the overlay.
- *  `clientsPool` is mutated locally so repeated calls within the same action (e.g. an Excel
- *  import loop) see clients created earlier in that same batch instead of colliding on IDs. */
-function resolveOrCreateClient(clientsPool: Client[], overlay: Overlay, name: string): string {
+/** Finds a client by (case-insensitive) company name, or creates one. */
+async function resolveOrCreateClient(name: string): Promise<string> {
   const trimmed = name.trim();
-  if (!trimmed) return clientsPool[0]?.id ?? "";
-  const existing = clientsPool.find((c) => c.company.toLowerCase() === trimmed.toLowerCase());
+  if (!trimmed) {
+    const first = await prisma.client.findFirst({ orderBy: { id: "asc" }, select: { id: true } });
+    return first?.id ?? "";
+  }
+
+  const existing = await prisma.client.findFirst({
+    where: { company: { equals: trimmed, mode: "insensitive" } },
+    select: { id: true },
+  });
   if (existing) return existing.id;
 
-  const newClient: Client = {
-    id: nextEntityId("CT", clientsPool),
-    company: trimmed,
-    industry: "General Contracting",
-    contacts: [],
-    address: "",
-    city: "",
-    state: "",
-    status: "Lead",
-    since: new Date().toISOString(),
-    totalProjects: 0,
-    totalInvoiced: 0,
-    outstandingBalance: 0,
-    communications: [],
-  };
-  clientsPool.push(newClient);
-  addEntity(overlay, "client", newClient);
-  return newClient.id;
+  const existingIds = await prisma.client.findMany({ select: { id: true } });
+  const id = nextEntityId("CT", existingIds);
+  await prisma.client.create({
+    data: {
+      id,
+      company: trimmed,
+      industry: "General Contracting",
+      contacts: [],
+      address: "",
+      city: "",
+      state: "",
+      status: "Lead",
+      since: new Date(),
+      totalProjects: 0,
+      totalInvoiced: 0,
+      outstandingBalance: 0,
+      communications: [],
+    },
+  });
+  return id;
 }
 
 function buildDefaultMilestones(projectId: string, startDate: Date, deadline: Date): Milestone[] {
@@ -70,17 +77,19 @@ function buildDefaultMilestones(projectId: string, startDate: Date, deadline: Da
   }));
 }
 
-/** Returns the `activity` field for a patch: the project's current feed with one new entry prepended. */
-function withActivity(project: Project, action: string): ActivityItem[] {
-  return [
-    { id: `${project.id}-AC${project.activity.length}-${Date.now()}`, actor: "You", action, date: new Date().toISOString() },
-    ...project.activity,
-  ];
+/** Builds the `activity` field for an update: the row's current feed with one new entry prepended. */
+function withActivity(current: { id: string; activity: unknown }, action: string): Prisma.InputJsonValue {
+  const existing = (current.activity as ActivityItem[] | null) ?? [];
+  const next: ActivityItem[] = [{ id: `${current.id}-AC${existing.length}-${Date.now()}`, actor: "You", action, date: new Date().toISOString() }, ...existing];
+  return next as unknown as Prisma.InputJsonValue;
+}
+
+/** Casts a strictly-typed JS value (our domain interfaces) to Prisma's Json input type. */
+function asJson(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
 }
 
 export async function createProjectAction(formData: FormData) {
-  const store = await getStore();
-
   const name = String(formData.get("name") || "").trim() || "Untitled Project";
   const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, "Residential");
   const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
@@ -93,27 +102,24 @@ export async function createProjectAction(formData: FormData) {
 
   const now = new Date();
   const startDate = parseDateOrDefault(String(formData.get("startDate") || ""), now);
-  const deadline = parseDateOrDefault(
-    String(formData.get("deadline") || ""),
-    new Date(startDate.getTime() + 180 * 86400000)
-  );
+  const deadline = parseDateOrDefault(String(formData.get("deadline") || ""), new Date(startDate.getTime() + 180 * 86400000));
 
-  const clientName = String(formData.get("clientName") || "");
+  const clientId = await resolveOrCreateClient(String(formData.get("clientName") || ""));
 
   const requestedPmId = String(formData.get("projectManagerId") || "");
-  const projectManagerId = store.employees.some((e) => e.id === requestedPmId) ? requestedPmId : store.employees[0]?.id ?? "";
+  const pmExists = requestedPmId && (await prisma.employee.findUnique({ where: { id: requestedPmId }, select: { id: true } }));
+  const projectManagerId = pmExists ? requestedPmId : (await prisma.employee.findFirst({ orderBy: { id: "asc" }, select: { id: true } }))?.id ?? "";
 
-  const teamIds = formData.getAll("teamIds").map(String).filter((id) => store.teams.some((t) => t.id === id));
+  const requestedTeamIds = formData.getAll("teamIds").map(String);
+  const validTeams = requestedTeamIds.length ? await prisma.team.findMany({ where: { id: { in: requestedTeamIds } }, select: { id: true } }) : [];
+  const teamIds = validTeams.map((t) => t.id);
 
-  const id = nextEntityId("PRJ", store.projects);
-  const activity: ActivityItem[] = [
-    { id: `${id}-AC0`, actor: "You", action: "created this project", date: now.toISOString() },
-  ];
+  const existingIds = await prisma.project.findMany({ select: { id: true } });
+  const id = nextEntityId("PRJ", existingIds);
+  const activity: ActivityItem[] = [{ id: `${id}-AC0`, actor: "You", action: "created this project", date: now.toISOString() }];
 
-  await writeOverlay((overlay) => {
-    const clientId = resolveOrCreateClient([...store.clients], overlay, clientName);
-
-    const project: Project = {
+  await prisma.project.create({
+    data: {
       id,
       name,
       category,
@@ -126,81 +132,101 @@ export async function createProjectAction(formData: FormData) {
       budget,
       spent: 0,
       invoicedToDate: 0,
-      startDate: startDate.toISOString(),
-      deadline: deadline.toISOString(),
+      startDate,
+      deadline,
       progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
       teamIds,
       projectManagerId,
       photos: [],
       filesCount: 0,
-      milestones: buildDefaultMilestones(id, startDate, deadline),
+      milestones: asJson(buildDefaultMilestones(id, startDate, deadline)),
       comments: [],
-      activity,
+      activity: asJson(activity),
       description,
-    };
-    addEntity(overlay, "project", project);
-
-    teamIds.forEach((tid) => {
-      const team = store.teams.find((t) => t.id === tid);
-      if (team && !team.currentProjectId) patchEntity(overlay, "team", tid, { currentProjectId: id });
-    });
+    },
   });
+
+  if (teamIds.length) {
+    await prisma.team.updateMany({ where: { id: { in: teamIds }, currentProjectId: null }, data: { currentProjectId: id } });
+  }
 
   revalidatePath("/projects");
   revalidatePath("/");
   redirect(`/projects/${id}`);
 }
 
-export async function createTeamAction(formData: FormData) {
-  const store = await getStore();
+export async function deleteProjectAction(formData: FormData) {
+  const projectId = String(formData.get("projectId") || "");
+  await prisma.project.delete({ where: { id: projectId } }).catch(() => {});
+  revalidatePath("/projects");
+  revalidatePath("/");
+  redirect("/projects");
+}
 
+export async function createTeamAction(formData: FormData) {
   const specialty = matchEnum(String(formData.get("specialty") || ""), TEAM_SPECIALTIES, "General Labor");
   const status = matchEnum(String(formData.get("status") || ""), TEAM_STATUSES, "Available");
   const callsign = String(formData.get("callsign") || "").trim();
 
   const requestedForemanId = String(formData.get("foremanId") || "");
-  const foremanId = store.employees.some((e) => e.id === requestedForemanId) ? requestedForemanId : store.employees[0]?.id ?? "";
-  const memberIds = formData
-    .getAll("memberIds")
-    .map(String)
-    .filter((id) => id !== foremanId && store.employees.some((e) => e.id === id));
+  const foremanExists = requestedForemanId && (await prisma.employee.findUnique({ where: { id: requestedForemanId }, select: { id: true } }));
+  const foremanId = foremanExists ? requestedForemanId : (await prisma.employee.findFirst({ orderBy: { id: "asc" }, select: { id: true } }))?.id ?? "";
 
-  const id = nextEntityId("TEAM", store.teams);
+  const requestedMemberIds = formData.getAll("memberIds").map(String).filter((mid) => mid !== foremanId);
+  const validMembers = requestedMemberIds.length
+    ? await prisma.employee.findMany({ where: { id: { in: requestedMemberIds } }, select: { id: true } })
+    : [];
+  const memberIds = validMembers.map((e) => e.id);
+
+  const existingIds = await prisma.team.findMany({ select: { id: true } });
+  const id = nextEntityId("TEAM", existingIds);
   const name = callsign ? `Crew ${callsign} — ${specialty}` : `Crew ${id.split("-")[1]} — ${specialty}`;
 
-  const team: Team = {
-    id,
-    name,
-    specialty,
-    foremanId,
-    memberIds,
-    currentProjectId: null,
-    completedProjects: 0,
-    avgWeeklyHours: 40,
-    performanceScore: 75,
-    safetyIncidents: [],
-    certifications: [],
-    status,
-  };
-
-  await writeOverlay((overlay) => {
-    addEntity(overlay, "team", team);
-    patchEntity(overlay, "employee", foremanId, { teamId: team.id });
-    memberIds.forEach((mid) => patchEntity(overlay, "employee", mid, { teamId: team.id }));
+  await prisma.team.create({
+    data: {
+      id,
+      name,
+      specialty,
+      foremanId,
+      memberIds,
+      currentProjectId: null,
+      completedProjects: 0,
+      avgWeeklyHours: 40,
+      performanceScore: 75,
+      safetyIncidents: [],
+      certifications: [],
+      status,
+    },
   });
+
+  if (foremanId) await prisma.employee.update({ where: { id: foremanId }, data: { teamId: id } }).catch(() => {});
+  if (memberIds.length) await prisma.employee.updateMany({ where: { id: { in: memberIds } }, data: { teamId: id } });
 
   revalidatePath("/teams");
   redirect(`/teams/${id}`);
 }
 
+export async function deleteTeamAction(formData: FormData) {
+  const teamId = String(formData.get("teamId") || "");
+  await prisma.employee.updateMany({ where: { teamId }, data: { teamId: null } });
+  await prisma.team.delete({ where: { id: teamId } }).catch(() => {});
+  revalidatePath("/teams");
+  redirect("/teams");
+}
+
 export async function updateClientStatusAction(formData: FormData) {
   const clientId = String(formData.get("clientId") || "");
   const status = matchEnum(String(formData.get("status") || ""), CLIENT_STATUSES, "Lead");
-  await writeOverlay((overlay) => {
-    patchEntity(overlay, "client", clientId, { status });
-  });
+  await prisma.client.update({ where: { id: clientId }, data: { status } }).catch(() => {});
   revalidatePath("/clients");
   revalidatePath(`/clients/${clientId}`);
+}
+
+export async function deleteClientAction(formData: FormData) {
+  const clientId = String(formData.get("clientId") || "");
+  await prisma.client.delete({ where: { id: clientId } }).catch(() => {});
+  revalidatePath("/clients");
+  redirect("/clients");
 }
 
 const CLIENT_ALIASES = {
@@ -272,56 +298,49 @@ export async function importClientsAction(formData: FormData) {
     redirect("/import?type=clients&error=nofile");
   }
 
-  const store = await getStore();
   const { headerMap, rows } = await loadWorksheetRows(file as File);
-  const clientsPool = [...store.clients];
+  const idPool = await prisma.client.findMany({ select: { id: true } });
 
   let imported = 0;
   let skipped = 0;
+  const toCreate: Prisma.ClientCreateManyInput[] = [];
 
-  await writeOverlay((overlay) => {
-    for (const row of rows) {
-      const company = pick(row, headerMap, CLIENT_ALIASES.company);
-      if (!company) {
-        skipped++;
-        continue;
-      }
-      const contactName = pick(row, headerMap, CLIENT_ALIASES.contactName);
-      const contactEmail = pick(row, headerMap, CLIENT_ALIASES.contactEmail);
-      const contactPhone = pick(row, headerMap, CLIENT_ALIASES.contactPhone);
-
-      const id = nextEntityId("CT", clientsPool);
-      const client: Client = {
-        id,
-        company,
-        industry: pick(row, headerMap, CLIENT_ALIASES.industry) || "General Contracting",
-        contacts:
-          contactName || contactEmail || contactPhone
-            ? [
-                {
-                  id: `${id}-C0`,
-                  name: contactName || "Primary Contact",
-                  title: "Contact",
-                  email: contactEmail,
-                  phone: contactPhone,
-                },
-              ]
-            : [],
-        address: pick(row, headerMap, CLIENT_ALIASES.address),
-        city: pick(row, headerMap, CLIENT_ALIASES.city),
-        state: pick(row, headerMap, CLIENT_ALIASES.state),
-        status: matchEnum(pick(row, headerMap, CLIENT_ALIASES.status), CLIENT_STATUSES, "Lead"),
-        since: new Date().toISOString(),
-        totalProjects: 0,
-        totalInvoiced: 0,
-        outstandingBalance: 0,
-        communications: [],
-      };
-      clientsPool.push(client);
-      addEntity(overlay, "client", client);
-      imported++;
+  for (const row of rows) {
+    const company = pick(row, headerMap, CLIENT_ALIASES.company);
+    if (!company) {
+      skipped++;
+      continue;
     }
-  });
+    const contactName = pick(row, headerMap, CLIENT_ALIASES.contactName);
+    const contactEmail = pick(row, headerMap, CLIENT_ALIASES.contactEmail);
+    const contactPhone = pick(row, headerMap, CLIENT_ALIASES.contactPhone);
+
+    const id = nextEntityId("CT", idPool);
+    idPool.push({ id });
+
+    toCreate.push({
+      id,
+      company,
+      industry: pick(row, headerMap, CLIENT_ALIASES.industry) || "General Contracting",
+      contacts: asJson(
+        contactName || contactEmail || contactPhone
+          ? [{ id: `${id}-C0`, name: contactName || "Primary Contact", title: "Contact", email: contactEmail, phone: contactPhone }]
+          : []
+      ),
+      address: pick(row, headerMap, CLIENT_ALIASES.address),
+      city: pick(row, headerMap, CLIENT_ALIASES.city),
+      state: pick(row, headerMap, CLIENT_ALIASES.state),
+      status: matchEnum(pick(row, headerMap, CLIENT_ALIASES.status), CLIENT_STATUSES, "Lead"),
+      since: new Date(),
+      totalProjects: 0,
+      totalInvoiced: 0,
+      outstandingBalance: 0,
+      communications: [],
+    });
+    imported++;
+  }
+
+  if (toCreate.length) await prisma.client.createMany({ data: toCreate });
 
   revalidatePath("/clients");
   redirect(`/import?type=clients&imported=${imported}&skipped=${skipped}`);
@@ -333,39 +352,36 @@ export async function importProjectsAction(formData: FormData) {
     redirect("/import?type=projects&error=nofile");
   }
 
-  const store = await getStore();
   const { headerMap, rows } = await loadWorksheetRows(file as File);
-  const clientsPool = [...store.clients];
-  const projectsPool = [...store.projects];
+  const idPool = await prisma.project.findMany({ select: { id: true } });
+  const defaultPmId = (await prisma.employee.findFirst({ orderBy: { id: "asc" }, select: { id: true } }))?.id ?? "";
 
   let imported = 0;
   let skipped = 0;
 
-  await writeOverlay((overlay) => {
-    for (const row of rows) {
-      const name = pick(row, headerMap, PROJECT_ALIASES.name);
-      const clientName = pick(row, headerMap, PROJECT_ALIASES.client);
-      if (!name && !clientName) {
-        skipped++;
-        continue;
-      }
+  for (const row of rows) {
+    const name = pick(row, headerMap, PROJECT_ALIASES.name);
+    const clientName = pick(row, headerMap, PROJECT_ALIASES.client);
+    if (!name && !clientName) {
+      skipped++;
+      continue;
+    }
 
-      const clientId = resolveOrCreateClient(clientsPool, overlay, clientName);
-      if (!clientId) {
-        skipped++;
-        continue;
-      }
+    const clientId = await resolveOrCreateClient(clientName);
+    if (!clientId) {
+      skipped++;
+      continue;
+    }
 
-      const now = new Date();
-      const startDate = parseDateOrDefault(pick(row, headerMap, PROJECT_ALIASES.startDate), now);
-      const deadline = parseDateOrDefault(
-        pick(row, headerMap, PROJECT_ALIASES.deadline),
-        new Date(startDate.getTime() + 180 * 86400000)
-      );
-      const status = matchEnum(pick(row, headerMap, PROJECT_ALIASES.status), PROJECT_STATUSES, "Planning");
-      const id = nextEntityId("PRJ", projectsPool);
+    const now = new Date();
+    const startDate = parseDateOrDefault(pick(row, headerMap, PROJECT_ALIASES.startDate), now);
+    const deadline = parseDateOrDefault(pick(row, headerMap, PROJECT_ALIASES.deadline), new Date(startDate.getTime() + 180 * 86400000));
+    const status = matchEnum(pick(row, headerMap, PROJECT_ALIASES.status), PROJECT_STATUSES, "Planning");
+    const id = nextEntityId("PRJ", idPool);
+    idPool.push({ id });
 
-      const project: Project = {
+    await prisma.project.create({
+      data: {
         id,
         name: name || `${clientName} Project`,
         category: matchEnum(pick(row, headerMap, PROJECT_ALIASES.category), PROJECT_CATEGORIES, "Residential"),
@@ -378,24 +394,21 @@ export async function importProjectsAction(formData: FormData) {
         budget: parseNumber(pick(row, headerMap, PROJECT_ALIASES.budget), 0),
         spent: 0,
         invoicedToDate: 0,
-        startDate: startDate.toISOString(),
-        deadline: deadline.toISOString(),
+        startDate,
+        deadline,
         progress: status === "Completed" ? 100 : status === "In Progress" ? 5 : 0,
         teamIds: [],
-        projectManagerId: store.employees[0]?.id ?? "",
+        projectManagerId: defaultPmId,
         photos: [],
         filesCount: 0,
-        milestones: buildDefaultMilestones(id, startDate, deadline),
+        milestones: asJson(buildDefaultMilestones(id, startDate, deadline)),
         comments: [],
-        activity: [{ id: `${id}-AC0`, actor: "System", action: "imported this project from a spreadsheet", date: now.toISOString() }],
+        activity: asJson([{ id: `${id}-AC0`, actor: "System", action: "imported this project from a spreadsheet", date: now.toISOString() }]),
         description: pick(row, headerMap, PROJECT_ALIASES.description) || "Imported via Excel.",
-      };
-
-      projectsPool.push(project);
-      addEntity(overlay, "project", project);
-      imported++;
-    }
-  });
+      },
+    });
+    imported++;
+  }
 
   revalidatePath("/projects");
   revalidatePath("/clients");
@@ -404,19 +417,18 @@ export async function importProjectsAction(formData: FormData) {
 }
 
 export async function updateProjectStatusAction(formData: FormData) {
-  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
   const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, "Planning");
-  const project = store.projects.find((p) => p.id === projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
 
   if (project) {
-    await writeOverlay((overlay) => {
-      const patch: Record<string, unknown> = {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
         status,
+        progress: status === "Completed" ? 100 : project.progress,
         activity: withActivity(project, `changed the project status to ${status}`),
-      };
-      if (status === "Completed") patch.progress = 100;
-      patchEntity(overlay, "project", projectId, patch);
+      },
     });
   }
 
@@ -426,35 +438,39 @@ export async function updateProjectStatusAction(formData: FormData) {
 }
 
 export async function updateProjectAction(formData: FormData) {
-  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
-  const project = store.projects.find((p) => p.id === projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) {
     redirect("/projects");
   }
 
   const name = String(formData.get("name") || "").trim() || project.name;
-  const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, project.category);
-  const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, project.status);
-  const riskLevel = matchEnum(String(formData.get("riskLevel") || ""), RISK_LEVELS, project.riskLevel);
+  const category = matchEnum(String(formData.get("category") || ""), PROJECT_CATEGORIES, project.category as (typeof PROJECT_CATEGORIES)[number]);
+  const status = matchEnum(String(formData.get("status") || ""), PROJECT_STATUSES, project.status as (typeof PROJECT_STATUSES)[number]);
+  const riskLevel = matchEnum(String(formData.get("riskLevel") || ""), RISK_LEVELS, project.riskLevel as (typeof RISK_LEVELS)[number]);
   const address = String(formData.get("address") || "").trim();
   const city = String(formData.get("city") || "").trim();
   const state = String(formData.get("state") || "").trim();
   const budget = parseNumber(String(formData.get("budget") || ""), project.budget);
   const description = String(formData.get("description") || "").trim() || project.description;
 
-  const startDate = parseDateOrDefault(String(formData.get("startDate") || ""), new Date(project.startDate)).toISOString();
-  const deadline = parseDateOrDefault(String(formData.get("deadline") || ""), new Date(project.deadline)).toISOString();
+  const startDate = parseDateOrDefault(String(formData.get("startDate") || ""), project.startDate);
+  const deadline = parseDateOrDefault(String(formData.get("deadline") || ""), project.deadline);
 
   const clientName = String(formData.get("clientName") || "");
+  const clientId = clientName.trim() ? await resolveOrCreateClient(clientName) : project.clientId;
 
   const requestedPmId = String(formData.get("projectManagerId") || "");
-  const projectManagerId = store.employees.some((e) => e.id === requestedPmId) ? requestedPmId : project.projectManagerId;
+  const pmExists = requestedPmId && (await prisma.employee.findUnique({ where: { id: requestedPmId }, select: { id: true } }));
+  const projectManagerId = pmExists ? requestedPmId : project.projectManagerId;
 
-  const teamIds = formData.getAll("teamIds").map(String).filter((id) => store.teams.some((t) => t.id === id));
+  const requestedTeamIds = formData.getAll("teamIds").map(String);
+  const validTeams = requestedTeamIds.length ? await prisma.team.findMany({ where: { id: { in: requestedTeamIds } }, select: { id: true } }) : [];
+  const teamIds = validTeams.map((t) => t.id);
 
-  await writeOverlay((overlay) => {
-    const patch: Record<string, unknown> = {
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
       name,
       category,
       status,
@@ -466,20 +482,17 @@ export async function updateProjectAction(formData: FormData) {
       description,
       startDate,
       deadline,
+      clientId,
       projectManagerId,
       teamIds,
+      progress: status === "Completed" ? 100 : project.progress,
       activity: withActivity(project, "updated the project details"),
-    };
-    if (clientName.trim()) patch.clientId = resolveOrCreateClient([...store.clients], overlay, clientName);
-    if (status === "Completed") patch.progress = 100;
-
-    patchEntity(overlay, "project", projectId, patch);
-
-    teamIds.forEach((tid) => {
-      const team = store.teams.find((t) => t.id === tid);
-      if (team && !team.currentProjectId) patchEntity(overlay, "team", tid, { currentProjectId: projectId });
-    });
+    },
   });
+
+  if (teamIds.length) {
+    await prisma.team.updateMany({ where: { id: { in: teamIds }, currentProjectId: null }, data: { currentProjectId: projectId } });
+  }
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
@@ -488,27 +501,26 @@ export async function updateProjectAction(formData: FormData) {
 }
 
 export async function addProjectPhotosAction(formData: FormData) {
-  // Photos are stored as base64 data URLs and can be several MB each — far too large for a
-  // cookie. They're kept in-memory only (best-effort, same-instance) rather than persisted
-  // through the session overlay; a cold start or a different serverless instance can lose them.
-  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
-  const project = store.projects.find((p) => p.id === projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
 
   const files = formData.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
-  let added = 0;
+  const newPhotos: string[] = [];
   for (const file of files) {
-    if (file.size > 8 * 1024 * 1024) continue; // skip anything over 8MB to keep in-memory store lean
+    if (file.size > 8 * 1024 * 1024) continue; // skip anything over 8MB
     const buffer = Buffer.from(await file.arrayBuffer());
     const mime = file.type || "image/jpeg";
-    project.photos.push(`data:${mime};base64,${buffer.toString("base64")}`);
-    added++;
+    newPhotos.push(`data:${mime};base64,${buffer.toString("base64")}`);
   }
 
-  if (added > 0) {
-    await writeOverlay((overlay) => {
-      patchEntity(overlay, "project", projectId, { activity: withActivity(project, `uploaded ${added} new site photo${added === 1 ? "" : "s"}`) });
+  if (newPhotos.length) {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        photos: { push: newPhotos },
+        activity: withActivity(project, `uploaded ${newPhotos.length} new site photo${newPhotos.length === 1 ? "" : "s"}`),
+      },
     });
   }
 
@@ -516,9 +528,8 @@ export async function addProjectPhotosAction(formData: FormData) {
 }
 
 export async function addProjectTaskAction(formData: FormData) {
-  const store = await getStore();
   const projectId = String(formData.get("projectId") || "");
-  const project = store.projects.find((p) => p.id === projectId);
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return;
 
   const title = String(formData.get("title") || "").trim();
@@ -526,66 +537,78 @@ export async function addProjectTaskAction(formData: FormData) {
 
   const priority = matchEnum(String(formData.get("priority") || ""), TASK_PRIORITIES, "Medium");
   const dueDate = parseDateOrDefault(String(formData.get("dueDate") || ""), new Date(Date.now() + 14 * 86400000));
-  const assigneeIds = formData
-    .getAll("assigneeIds")
-    .map(String)
-    .filter((id) => store.employees.some((e) => e.id === id));
+  const requestedAssigneeIds = formData.getAll("assigneeIds").map(String);
+  const validAssignees = requestedAssigneeIds.length
+    ? await prisma.employee.findMany({ where: { id: { in: requestedAssigneeIds } }, select: { id: true } })
+    : [];
+  const assigneeIds = validAssignees.map((e) => e.id);
 
-  const id = nextEntityId("TSK", store.tasks);
+  const existingIds = await prisma.task.findMany({ select: { id: true } });
+  const id = nextEntityId("TSK", existingIds);
   const now = new Date();
-  const task: Task = {
-    id,
-    title,
-    description: String(formData.get("description") || "").trim(),
-    projectId,
-    status: "To Do",
-    priority,
-    assigneeIds,
-    dueDate: dueDate.toISOString(),
-    createdDate: now.toISOString(),
-    attachments: 0,
-    comments: 0,
-    tags: [],
-  };
 
-  await writeOverlay((overlay) => {
-    addEntity(overlay, "task", task);
-    patchEntity(overlay, "project", projectId, { activity: withActivity(project, `added a new task: "${title}"`) });
+  await prisma.task.create({
+    data: {
+      id,
+      title,
+      description: String(formData.get("description") || "").trim(),
+      projectId,
+      status: "To Do",
+      priority,
+      assigneeIds,
+      dueDate,
+      createdDate: now,
+      attachments: 0,
+      comments: 0,
+      tags: [],
+    },
+  });
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { activity: withActivity(project, `added a new task: "${title}"`) },
   });
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/tasks");
 }
 
+export async function deleteTaskAction(formData: FormData) {
+  const taskId = String(formData.get("taskId") || "");
+  const projectId = String(formData.get("projectId") || "");
+  await prisma.task.delete({ where: { id: taskId } }).catch(() => {});
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/tasks");
+}
+
 export async function createEquipmentAction(formData: FormData) {
-  const store = await getStore();
   const name = String(formData.get("name") || "").trim() || "New Equipment";
   const type = matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, "Excavator");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
   const location = String(formData.get("location") || "").trim() || "Main Equipment Yard";
   const requestedProjectId = String(formData.get("currentProjectId") || "");
-  const currentProjectId = store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null;
+  const projectExists = requestedProjectId && (await prisma.project.findUnique({ where: { id: requestedProjectId }, select: { id: true } }));
+  const currentProjectId = projectExists ? requestedProjectId : null;
 
-  const id = nextEntityId("EQP", store.equipment);
+  const existingIds = await prisma.equipment.findMany({ select: { id: true } });
+  const id = nextEntityId("EQP", existingIds);
   const suffix = id.split("-")[1].padStart(5, "0");
   const now = new Date();
 
-  const equipment: Equipment = {
-    id,
-    name,
-    type,
-    status,
-    currentProjectId,
-    location,
-    lastMaintenance: now.toISOString(),
-    nextMaintenance: new Date(now.getTime() + 90 * 86400000).toISOString(),
-    qrCode: `QR-EQP-${suffix}`,
-    hoursUsed: 0,
-    purchaseDate: now.toISOString(),
-  };
-
-  await writeOverlay((overlay) => {
-    addEntity(overlay, "equipment", equipment);
+  await prisma.equipment.create({
+    data: {
+      id,
+      name,
+      type,
+      status,
+      currentProjectId,
+      location,
+      lastMaintenance: now,
+      nextMaintenance: new Date(now.getTime() + 90 * 86400000),
+      qrCode: `QR-EQP-${suffix}`,
+      hoursUsed: 0,
+      purchaseDate: now,
+    },
   });
 
   revalidatePath("/equipment");
@@ -593,26 +616,27 @@ export async function createEquipmentAction(formData: FormData) {
 }
 
 export async function updateEquipmentAction(formData: FormData) {
-  const store = await getStore();
   const equipmentId = String(formData.get("equipmentId") || "");
-  const equipment = store.equipment.find((e) => e.id === equipmentId);
+  const equipment = await prisma.equipment.findUnique({ where: { id: equipmentId } });
   if (!equipment) {
     redirect("/equipment");
   }
 
   const requestedProjectId = String(formData.get("currentProjectId") || "");
+  const projectExists = requestedProjectId && (await prisma.project.findUnique({ where: { id: requestedProjectId }, select: { id: true } }));
 
-  await writeOverlay((overlay) => {
-    patchEntity(overlay, "equipment", equipmentId, {
+  await prisma.equipment.update({
+    where: { id: equipmentId },
+    data: {
       name: String(formData.get("name") || "").trim() || equipment.name,
-      type: matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, equipment.type),
-      status: matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, equipment.status),
+      type: matchEnum(String(formData.get("type") || ""), EQUIPMENT_TYPES, equipment.type as (typeof EQUIPMENT_TYPES)[number]),
+      status: matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, equipment.status as (typeof EQUIPMENT_STATUSES)[number]),
       location: String(formData.get("location") || "").trim() || equipment.location,
       hoursUsed: parseNumber(String(formData.get("hoursUsed") || ""), equipment.hoursUsed),
-      lastMaintenance: parseDateOrDefault(String(formData.get("lastMaintenance") || ""), new Date(equipment.lastMaintenance)).toISOString(),
-      nextMaintenance: parseDateOrDefault(String(formData.get("nextMaintenance") || ""), new Date(equipment.nextMaintenance)).toISOString(),
-      currentProjectId: store.projects.some((p) => p.id === requestedProjectId) ? requestedProjectId : null,
-    });
+      lastMaintenance: parseDateOrDefault(String(formData.get("lastMaintenance") || ""), equipment.lastMaintenance),
+      nextMaintenance: parseDateOrDefault(String(formData.get("nextMaintenance") || ""), equipment.nextMaintenance),
+      currentProjectId: projectExists ? requestedProjectId : null,
+    },
   });
 
   revalidatePath("/equipment");
@@ -622,14 +646,18 @@ export async function updateEquipmentAction(formData: FormData) {
 export async function updateEquipmentStatusAction(formData: FormData) {
   const equipmentId = String(formData.get("equipmentId") || "");
   const status = matchEnum(String(formData.get("status") || ""), EQUIPMENT_STATUSES, "Available");
-  await writeOverlay((overlay) => {
-    patchEntity(overlay, "equipment", equipmentId, { status });
-  });
+  await prisma.equipment.update({ where: { id: equipmentId }, data: { status } }).catch(() => {});
   revalidatePath("/equipment");
 }
 
+export async function deleteEquipmentAction(formData: FormData) {
+  const equipmentId = String(formData.get("equipmentId") || "");
+  await prisma.equipment.delete({ where: { id: equipmentId } }).catch(() => {});
+  revalidatePath("/equipment");
+  redirect("/equipment");
+}
+
 export async function createMaterialAction(formData: FormData) {
-  const store = await getStore();
   const name = String(formData.get("name") || "").trim() || "New Material";
   const category = matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, "Finishing");
   const unit = String(formData.get("unit") || "").trim() || "unit";
@@ -638,27 +666,15 @@ export async function createMaterialAction(formData: FormData) {
   const unitCost = parseNumber(String(formData.get("unitCost") || ""), 0);
   const warehouseLocation = String(formData.get("warehouseLocation") || "").trim() || "Aisle 1 - Bin A1";
   const requestedSupplierId = String(formData.get("supplierId") || "");
-  const supplierId = store.suppliers.some((s) => s.id === requestedSupplierId) ? requestedSupplierId : store.suppliers[0]?.id ?? "";
+  const supplierExists = requestedSupplierId && (await prisma.supplier.findUnique({ where: { id: requestedSupplierId }, select: { id: true } }));
+  const supplierId = supplierExists ? requestedSupplierId : (await prisma.supplier.findFirst({ orderBy: { id: "asc" }, select: { id: true } }))?.id ?? "";
 
-  const id = nextEntityId("MAT", store.materials);
+  const existingIds = await prisma.material.findMany({ select: { id: true } });
+  const id = nextEntityId("MAT", existingIds);
   const suffix = id.split("-")[1].padStart(5, "0");
 
-  const material: Material = {
-    id,
-    name,
-    category,
-    sku: `SKU-${suffix}`,
-    quantity,
-    unit,
-    reorderLevel,
-    warehouseLocation,
-    supplierId,
-    unitCost,
-    qrCode: `QR-MAT-${suffix}`,
-  };
-
-  await writeOverlay((overlay) => {
-    addEntity(overlay, "material", material);
+  await prisma.material.create({
+    data: { id, name, category, sku: `SKU-${suffix}`, quantity, unit, reorderLevel, warehouseLocation, supplierId, unitCost, qrCode: `QR-MAT-${suffix}` },
   });
 
   revalidatePath("/warehouse");
@@ -666,17 +682,18 @@ export async function createMaterialAction(formData: FormData) {
 }
 
 export async function updateMaterialAction(formData: FormData) {
-  const store = await getStore();
   const materialId = String(formData.get("materialId") || "");
-  const material = store.materials.find((m) => m.id === materialId);
+  const material = await prisma.material.findUnique({ where: { id: materialId } });
   if (!material) {
     redirect("/warehouse");
   }
 
   const requestedSupplierId = String(formData.get("supplierId") || "");
+  const supplierExists = requestedSupplierId && (await prisma.supplier.findUnique({ where: { id: requestedSupplierId }, select: { id: true } }));
 
-  await writeOverlay((overlay) => {
-    patchEntity(overlay, "material", materialId, {
+  await prisma.material.update({
+    where: { id: materialId },
+    data: {
       name: String(formData.get("name") || "").trim() || material.name,
       category: matchEnum(String(formData.get("category") || ""), MATERIAL_CATEGORIES, material.category),
       unit: String(formData.get("unit") || "").trim() || material.unit,
@@ -684,10 +701,17 @@ export async function updateMaterialAction(formData: FormData) {
       reorderLevel: parseNumber(String(formData.get("reorderLevel") || ""), material.reorderLevel),
       unitCost: parseNumber(String(formData.get("unitCost") || ""), material.unitCost),
       warehouseLocation: String(formData.get("warehouseLocation") || "").trim() || material.warehouseLocation,
-      ...(store.suppliers.some((s) => s.id === requestedSupplierId) ? { supplierId: requestedSupplierId } : {}),
-    });
+      ...(supplierExists ? { supplierId: requestedSupplierId } : {}),
+    },
   });
 
+  revalidatePath("/warehouse");
+  redirect("/warehouse");
+}
+
+export async function deleteMaterialAction(formData: FormData) {
+  const materialId = String(formData.get("materialId") || "");
+  await prisma.material.delete({ where: { id: materialId } }).catch(() => {});
   revalidatePath("/warehouse");
   redirect("/warehouse");
 }

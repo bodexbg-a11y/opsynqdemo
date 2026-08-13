@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
-import { HardHat, ShieldAlert, Award, Users } from "lucide-react";
+import { HardHat, ShieldAlert, Award, Users, Trash2 } from "lucide-react";
 import { getStore } from "@/lib/data/store";
+import { deleteTeamAction } from "@/lib/actions";
 import { Card, CardHeader, PageHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
+import { ConfirmDeleteForm } from "@/components/modules/confirm-delete-form";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 
@@ -25,7 +27,20 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ id:
       <PageHeader
         title={team.name}
         subtitle={`${team.specialty} crew · ${members.length + 1} members`}
-        action={<Badge variant={team.status === "On Site" ? "success" : team.status === "Off Duty" ? "warning" : "neutral"}>{team.status}</Badge>}
+        action={
+          <div className="flex items-center gap-2">
+            <Badge variant={team.status === "On Site" ? "success" : team.status === "Off Duty" ? "warning" : "neutral"}>{team.status}</Badge>
+            <ConfirmDeleteForm action={deleteTeamAction} fields={{ teamId: team.id }} confirmMessage={`Delete "${team.name}"? This cannot be undone.`}>
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-danger-100 hover:border-danger-500 hover:text-danger-500 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </ConfirmDeleteForm>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, ArrowUpRight } from "lucide-react";
+import { Search, ArrowUpRight, Trash2 } from "lucide-react";
 import type { Client } from "@/lib/data/types";
 import type { ClientStats } from "@/lib/data/analytics";
+import { deleteClientAction } from "@/lib/actions";
 import { ClientStatusSelect } from "./client-status-select";
+import { ConfirmDeleteForm } from "./confirm-delete-form";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const STATUS_FILTERS = ["All", "Active", "Past", "Lead"] as const;
@@ -62,6 +64,7 @@ export function ClientsTable({ clients, stats }: { clients: Client[]; stats: Rec
                 <th className="px-4 py-3 font-medium">Projects</th>
                 <th className="px-4 py-3 font-medium">Total Invoiced</th>
                 <th className="px-4 py-3 font-medium">Outstanding</th>
+                <th className="px-4 py-3 font-medium"></th>
               </tr>
             </thead>
             <tbody>
@@ -85,6 +88,13 @@ export function ClientsTable({ clients, stats }: { clients: Client[]; stats: Rec
                     <td className="px-4 py-3 text-ink-700 font-medium whitespace-nowrap">{formatCurrency(s.totalInvoiced, { compact: true })}</td>
                     <td className={cn("px-4 py-3 whitespace-nowrap font-medium", s.outstandingBalance > 0 ? "text-warning-500" : "text-ink-400")}>
                       {s.outstandingBalance > 0 ? formatCurrency(s.outstandingBalance, { compact: true }) : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ConfirmDeleteForm action={deleteClientAction} fields={{ clientId: c.id }} confirmMessage={`Delete "${c.company}"? Their projects will remain but lose this client link.`}>
+                        <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </ConfirmDeleteForm>
                     </td>
                   </tr>
                 );

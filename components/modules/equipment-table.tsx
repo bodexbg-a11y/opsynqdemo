@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, QrCode, MapPin, Pencil } from "lucide-react";
+import { Search, QrCode, MapPin, Pencil, Trash2 } from "lucide-react";
 import type { Equipment, Project } from "@/lib/data/types";
+import { deleteEquipmentAction } from "@/lib/actions";
 import { EquipmentStatusSelect } from "./equipment-status-select";
+import { ConfirmDeleteForm } from "./confirm-delete-form";
 import { cn, formatDate } from "@/lib/utils";
 
 const STATUS_FILTERS = ["All", "Available", "In Use", "Maintenance"] as const;
@@ -79,9 +81,16 @@ export function EquipmentTable({ equipment, projects }: { equipment: Equipment[]
                     <td className="px-4 py-3 text-ink-500 whitespace-nowrap">{formatDate(eq.nextMaintenance)}</td>
                     <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{eq.qrCode}</span></td>
                     <td className="px-4 py-3">
-                      <Link href={`/equipment/${eq.id}/edit`} className="flex items-center gap-1 text-ink-400 hover:text-blue-600 transition-colors">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Link>
+                      <div className="flex items-center gap-2.5">
+                        <Link href={`/equipment/${eq.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Link>
+                        <ConfirmDeleteForm action={deleteEquipmentAction} fields={{ equipmentId: eq.id }} confirmMessage={`Delete "${eq.name}"?`}>
+                          <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </ConfirmDeleteForm>
+                      </div>
                     </td>
                   </tr>
                 );

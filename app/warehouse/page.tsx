@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { getStore } from "@/lib/data/store";
+import { deleteMaterialAction } from "@/lib/actions";
 import { PageHeader, Card, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { ConfirmDeleteForm } from "@/components/modules/confirm-delete-form";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { QrCode, Star, Plus, Pencil } from "lucide-react";
+import { QrCode, Star, Plus, Pencil, Trash2 } from "lucide-react";
 
 export default async function WarehousePage() {
   const { materials, suppliers, purchaseOrders } = await getStore();
@@ -67,9 +69,16 @@ export default async function WarehousePage() {
                             <td className="px-4 py-3 text-ink-600 whitespace-nowrap">{formatCurrency(m.unitCost)}</td>
                             <td className="px-4 py-3 text-ink-400"><span className="flex items-center gap-1"><QrCode className="w-3.5 h-3.5" />{m.qrCode}</span></td>
                             <td className="px-4 py-3">
-                              <Link href={`/warehouse/materials/${m.id}/edit`} className="flex items-center gap-1 text-ink-400 hover:text-blue-600 transition-colors">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Link>
+                              <div className="flex items-center gap-2.5">
+                                <Link href={`/warehouse/materials/${m.id}/edit`} className="text-ink-400 hover:text-blue-600 transition-colors">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Link>
+                                <ConfirmDeleteForm action={deleteMaterialAction} fields={{ materialId: m.id }} confirmMessage={`Delete "${m.name}"?`}>
+                                  <button type="submit" className="text-ink-400 hover:text-danger-500 transition-colors" title="Delete">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </ConfirmDeleteForm>
+                              </div>
                             </td>
                           </tr>
                         );

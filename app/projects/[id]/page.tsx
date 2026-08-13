@@ -15,10 +15,11 @@ import {
   Pencil,
   Upload,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { getStore } from "@/lib/data/store";
 import { projectProfitability } from "@/lib/data/analytics";
-import { addProjectPhotosAction, addProjectTaskAction } from "@/lib/actions";
+import { addProjectPhotosAction, addProjectTaskAction, deleteProjectAction, deleteTaskAction } from "@/lib/actions";
 import { TASK_PRIORITIES } from "@/lib/data/constants";
 import { RiskBadge, TaskStatusBadge, PriorityBadge, InvoiceStatusBadge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -26,6 +27,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Tabs } from "@/components/ui/tabs";
 import { ProjectStatusSelect } from "@/components/modules/project-status-select";
+import { ConfirmDeleteForm } from "@/components/modules/confirm-delete-form";
 import { inputClass, selectClass } from "@/components/ui/form";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -83,6 +85,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <Pencil className="w-3.5 h-3.5" />
               Edit
             </Link>
+            <ConfirmDeleteForm
+              action={deleteProjectAction}
+              fields={{ projectId: project.id }}
+              confirmMessage={`Delete "${project.name}"? This also removes its tasks, invoices, contracts and documents. This cannot be undone.`}
+            >
+              <button
+                type="submit"
+                className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white border border-ink-200 hover:bg-danger-100 hover:border-danger-500 hover:text-danger-500 text-ink-700 rounded-lg px-3 py-2 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </ConfirmDeleteForm>
           </div>
         </div>
 
@@ -251,6 +266,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                           <AvatarStack names={assignees} max={2} />
                           <PriorityBadge priority={t.priority} />
                           <TaskStatusBadge status={t.status} />
+                          <ConfirmDeleteForm
+                            action={deleteTaskAction}
+                            fields={{ taskId: t.id, projectId: project.id }}
+                            confirmMessage={`Delete task "${t.title}"?`}
+                          >
+                            <button type="submit" className="text-ink-300 hover:text-danger-500 transition-colors p-1" title="Delete task">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </ConfirmDeleteForm>
                         </div>
                       );
                     })}

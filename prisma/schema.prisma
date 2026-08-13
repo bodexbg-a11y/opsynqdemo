@@ -1,0 +1,266 @@
+// OPSYNQ Construction OS — database schema.
+//
+// Nested collections that are always read/written as a whole with their parent
+// (milestones, comments, activity feed, contacts, communications, safety incidents)
+// are stored as Json rather than normalized into their own tables — they're never
+// queried independently of their parent record, so normalizing them would add
+// migration/relation complexity with no real benefit for this app.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Project {
+  id               String    @id
+  name             String
+  category         String
+  clientId         String
+  address          String
+  city             String
+  state            String
+  status           String
+  riskLevel        String
+  budget           Int
+  spent            Int
+  invoicedToDate   Int
+  startDate        DateTime
+  deadline         DateTime
+  progress         Int
+  teamIds          String[]
+  projectManagerId String
+  photos           String[]
+  filesCount       Int
+  milestones       Json
+  comments         Json
+  activity         Json
+  description      String    @db.Text
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tasks     Task[]
+  invoices  Invoice[]
+  contracts Contract[]
+  documents DocumentItem[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model Employee {
+  id               String   @id
+  name             String
+  role             String
+  department       String
+  permission       String
+  email            String
+  phone            String
+  hireDate         DateTime
+  employmentType   String
+  status           String
+  teamId           String?
+  vacationUsed     Int
+  vacationTotal    Int
+  weeklyHours      Int
+  payrollStatus    String
+  performanceScore Int
+  avatarSeed       String
+  certifications   String[]
+  city             String
+
+  @@index([teamId])
+}
+
+model Team {
+  id                String   @id
+  name              String
+  specialty         String
+  foremanId         String
+  memberIds         String[]
+  currentProjectId  String?
+  completedProjects Int
+  avgWeeklyHours    Int
+  performanceScore  Int
+  safetyIncidents   Json
+  certifications    String[]
+  status            String
+}
+
+model Task {
+  id          String   @id
+  title       String
+  description String   @db.Text
+  projectId   String
+  status      String
+  priority    String
+  assigneeIds String[]
+  dueDate     DateTime
+  createdDate DateTime
+  attachments Int
+  comments    Int
+  tags        String[]
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+model Client {
+  id                 String   @id
+  company            String
+  industry           String
+  contacts           Json
+  address            String
+  city               String
+  state              String
+  status             String
+  since              DateTime
+  totalProjects      Int
+  totalInvoiced      Int
+  outstandingBalance Int
+  communications     Json
+}
+
+model Invoice {
+  id        String    @id
+  number    String
+  projectId String
+  clientId  String
+  amount    Int
+  status    String
+  issueDate DateTime
+  dueDate   DateTime
+  paidDate  DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([clientId])
+}
+
+model Contract {
+  id         String   @id
+  projectId  String
+  clientId   String
+  title      String
+  type       String
+  value      Int
+  signedDate DateTime
+  status     String
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Subcontractor {
+  id               String   @id
+  company          String
+  trade            String
+  contactName      String
+  phone            String
+  email            String
+  rating           Float
+  jobsCompleted    Int
+  activeProjectIds String[]
+  totalInvoiced    Int
+  status           String
+}
+
+model Equipment {
+  id               String   @id
+  name             String
+  type             String
+  status           String
+  currentProjectId String?
+  location         String
+  lastMaintenance  DateTime
+  nextMaintenance  DateTime
+  qrCode           String
+  hoursUsed        Int
+  purchaseDate     DateTime
+}
+
+model Supplier {
+  id          String @id
+  name        String
+  category    String
+  contact     String
+  rating      Float
+  ordersCount Int
+}
+
+model Material {
+  id                String @id
+  name              String
+  category          String
+  sku               String
+  quantity          Int
+  unit              String
+  reorderLevel      Int
+  warehouseLocation String
+  supplierId        String
+  unitCost          Float
+  qrCode            String
+}
+
+model PurchaseOrder {
+  id           String   @id
+  supplierId   String
+  materialId   String
+  quantity     Int
+  total        Int
+  status       String
+  orderDate    DateTime
+  expectedDate DateTime
+}
+
+model DocumentItem {
+  id         String   @id
+  name       String
+  category   String
+  projectId  String?
+  uploadedBy String
+  uploadDate DateTime
+  fileSize   String
+  fileType   String
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+}
+
+model AppNotification {
+  id        String   @id
+  type      String
+  message   String
+  timestamp DateTime
+  read      Boolean
+  severity  String
+  link      String?
+}
+
+model AdCampaign {
+  id                String    @id
+  platform          String
+  name              String
+  objective         String
+  status            String
+  projectId         String?
+  budget            Int
+  spend             Int
+  impressions       Int
+  clicks            Int
+  ctr               Float
+  cpc               Float
+  leads             Int
+  conversions       Int
+  costPerConversion Float
+  roas              Float
+  startDate         DateTime
+  endDate           DateTime?
+}
