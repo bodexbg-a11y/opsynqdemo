@@ -32,7 +32,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <Card className="p-5 lg:col-span-1">
           <h3 className="text-[14px] font-semibold text-ink-900 mb-3 flex items-center gap-1.5"><Building2 className="w-4 h-4 text-blue-500" />Company Info</h3>
           <div className="space-y-2.5 text-[12.5px] text-ink-600">
-            <div className="flex items-center gap-2"><MapPin className="w-3.5 h-3.5 text-ink-400" />{client.address}, {client.city}, {client.state}</div>
+            {/* A client converted from a lead has no address yet — don't render bare commas. */}
+            <div className="flex items-center gap-2">
+              <MapPin className="w-3.5 h-3.5 text-ink-400" />
+              {[client.address, client.city, client.state].filter(Boolean).join(", ") || (
+                <span className="text-ink-300">No address on file</span>
+              )}
+            </div>
           </div>
           <h3 className="text-[14px] font-semibold text-ink-900 mt-6 mb-3">Contacts</h3>
           <div className="space-y-3">

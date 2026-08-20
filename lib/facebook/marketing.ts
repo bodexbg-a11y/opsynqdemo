@@ -1,5 +1,8 @@
 import "server-only";
 import { graphGet, graphGetAll, getFacebookToken, type GraphError, type GraphResult } from "./client";
+import { collectLeads, type FbLead } from "./leads";
+
+export type { FbLead } from "./leads";
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 
@@ -97,16 +100,6 @@ export interface FbCampaignRow extends FbCampaign {
   metrics: FbMetrics;
 }
 
-export interface FbLead {
-  id: string;
-  created_time: string;
-  form_id?: string;
-  form_name?: string;
-  campaign_name?: string;
-  ad_name?: string;
-  fields: { name: string; value: string }[];
-}
-
 export interface FacebookSnapshot {
   account: FbAdAccount;
   totals: FbMetrics;
@@ -197,6 +190,8 @@ function addMetrics(a: FbMetrics, b: FbMetrics): FbMetrics {
 const INSIGHT_FIELDS =
   "campaign_id,campaign_name,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,action_values,cost_per_action_type";
 
+const AD_FIELDS = "id,name,adset_id,campaign_id,status,effective_status,creative{id,thumbnail_url,title,body}";
+
 /* ── Fetchers ──────────────────────────────────────────────────────────────── */
 
 /** Lists every ad account the token can see. */
@@ -248,11 +243,7 @@ export async function fetchAccountSnapshot(
       },
       token
     ),
-    graphGetAll<FbAd>(
-      `${actPath}/ads`,
-      { fields: "id,name,adset_id,campaign_id,status,effective_status,creative{id,thumbnail_url,title,body}" },
-      token
-    ),
+    graphGetAll<FbAd>(`${actPath}/ads`, { fields: AD_FIELDS }, token),
   ]);
 
   // Campaigns are the backbone of the page — if that call fails, so does the page.
@@ -280,7 +271,9 @@ export async function fetchAccountSnapshot(
       ? toMetrics(accountInsightsRes.data[0])
       : campaigns.reduce((acc, c) => addMetrics(acc, c.metrics), EMPTY_METRICS);
 
-  const leadsRes = await fetchLeads(token, adsRes.ok ? adsRes.data : []);
+  // Bounded here so one huge account can't stall the page; the CRM sync in
+  // `syncFacebookLeadsAction` walks every ad instead.
+  const leadsRes = await collectLeads(token, adsRes.ok ? adsRes.data : [], { maxAds: 25, maxPagesPerAd: 2 });
   if (!leadsRes.ok) {
     warnings.push(`Lead records unavailable: ${leadsRes.error.message} (needs the leads_retrieval permission)`);
   }
@@ -300,57 +293,16 @@ export async function fetchAccountSnapshot(
   };
 }
 
-interface RawLead {
-  id: string;
-  created_time: string;
-  field_data?: { name: string; values: string[] }[];
-  campaign_name?: string;
-  ad_name?: string;
-  form_id?: string;
-}
-
 /**
- * Pulls actual lead-form submissions. Requires the leads_retrieval permission,
- * so this is treated as optional enrichment on top of the lead *counts* that
- * always come through insights.
+ * Every ad in an account, across all campaigns and statuses.
+ *
+ * The CRM sync needs the complete list — a paused campaign still holds the
+ * leads it collected while it was running — so this walks far more pages than
+ * a page render would.
  */
-async function fetchLeads(token: string, ads: FbAd[], maxAds = 10): Promise<GraphResult<FbLead[]>> {
-  // Only lead-gen ads have a /leads edge; probe the most recent handful.
-  const candidates = ads.slice(0, maxAds);
-  if (!candidates.length) return { ok: true, data: [] };
-
-  const leads: FbLead[] = [];
-  let lastError: GraphError | null = null;
-
-  for (const ad of candidates) {
-    const result = await graphGetAll<RawLead>(
-      `${ad.id}/leads`,
-      { fields: "id,created_time,field_data,campaign_name,ad_name,form_id" },
-      token,
-      2
-    );
-    if (!result.ok) {
-      lastError = result.error;
-      continue;
-    }
-    for (const raw of result.data) {
-      leads.push({
-        id: raw.id,
-        created_time: raw.created_time,
-        form_id: raw.form_id,
-        campaign_name: raw.campaign_name,
-        ad_name: raw.ad_name ?? ad.name,
-        fields: (raw.field_data ?? []).map((f) => ({ name: f.name, value: f.values?.[0] ?? "" })),
-      });
-    }
-  }
-
-  // Only surface an error when nothing at all came back — a single ad without a
-  // lead form shouldn't look like a broken integration.
-  if (!leads.length && lastError) return { ok: false, error: lastError };
-
-  leads.sort((a, b) => new Date(b.created_time).getTime() - new Date(a.created_time).getTime());
-  return { ok: true, data: leads.slice(0, 100) };
+export async function fetchAllAds(token: string, account: FbAdAccount): Promise<GraphResult<FbAd[]>> {
+  const actPath = account.id.startsWith("act_") ? account.id : `act_${account.id}`;
+  return graphGetAll<FbAd>(`${actPath}/ads`, { fields: AD_FIELDS }, token, 50);
 }
 
 /* ── Page-level entry point ────────────────────────────────────────────────── */

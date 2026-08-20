@@ -36,6 +36,10 @@ export const TEAM_STATUSES = ["On Site", "Available", "Off Duty"] as const;
 
 export const CLIENT_STATUSES: Client["status"][] = ["Active", "Past", "Lead"];
 
+/** Pipeline stages for a lead captured from an ad form. */
+export const LEAD_STATUSES = ["New", "Contacted", "Qualified", "Won", "Lost"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
 export const TASK_STATUSES: TaskStatus[] = ["To Do", "In Progress", "Blocked", "Completed"];
 
 export const TASK_PRIORITIES: TaskPriority[] = ["Low", "Medium", "High", "Urgent"];

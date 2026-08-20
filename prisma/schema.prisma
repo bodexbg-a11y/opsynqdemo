@@ -183,6 +183,54 @@ model Client {
   totalInvoiced      Int
   outstandingBalance Int
   communications     Json
+
+  leads Lead[]
+}
+
+/// A lead-form submission pulled from Facebook and stored locally, so it
+/// survives past Meta's 90-day retention window and can be worked in the CRM.
+model Lead {
+  id String @id
+
+  /// Meta's own lead id. Unique, so re-running the sync updates rather than duplicates.
+  fbLeadId String @unique
+
+  fullName    String
+  email       String?
+  phone       String?
+  companyName String?
+  message     String?
+
+  /// Every field Meta returned, verbatim — custom form questions are never lost.
+  rawFields Json
+
+  adAccountId  String?
+  campaignId   String?
+  campaignName String?
+  adSetName    String?
+  adId         String?
+  adName       String?
+  formId       String?
+  /// "fb" or "ig" — Meta reports which surface the form was filled on.
+  platform     String?
+  isOrganic    Boolean @default(false)
+
+  status String  @default("New")
+  notes  String?
+
+  /// When the person actually submitted the form on Facebook.
+  createdTime DateTime
+  /// When our sync last touched this row.
+  syncedAt    DateTime @default(now())
+
+  /// Set once the lead is converted into a CRM client.
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([createdTime])
+  @@index([clientId])
+  @@index([campaignId])
 }
 
 model Invoice {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Wallet, Users, Target, TrendingUp, Eye, MousePointerClick, Megaphone } from "lucide-react";
+import { AlertTriangle, Wallet, Users, Target, TrendingUp, Eye, MousePointerClick, Megaphone, Inbox } from "lucide-react";
 import { explainGraphError, type GraphError } from "@/lib/facebook/client";
 import { DATE_PRESETS, ACCOUNT_STATUS, type FacebookState, type FbMetrics } from "@/lib/facebook/marketing";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -377,8 +377,17 @@ export function FacebookDashboard({
                   title="Lead form submissions"
                   subtitle={
                     leads.length
-                      ? `${leads.length} most recent submissions pulled from your lead-gen ads`
+                      ? "A live read of your most recent lead-gen ads — nothing here is stored yet"
                       : "No lead records retrieved — this needs the leads_retrieval permission, and only lead-gen ads have submissions"
+                  }
+                  action={
+                    <Link
+                      href="/leads"
+                      className="flex items-center gap-1.5 text-[12.5px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg px-2.5 py-1.5 transition-colors"
+                    >
+                      <Inbox className="w-3.5 h-3.5" />
+                      Open Leads CRM
+                    </Link>
                   }
                 />
                 {leads.length > 0 && (

@@ -139,5 +139,10 @@ export function explainGraphError(error: GraphError): string {
   if (error.code === 2635) {
     return `Graph API ${GRAPH_VERSION} is no longer supported. Set FACEBOOK_API_VERSION to a current version.`;
   }
-  return "See the Graph API message above for details.";
+  // No Meta error code means the response never came from Meta — something
+  // between this server and graph.facebook.com answered instead.
+  if (error.code === undefined && error.status !== undefined && [403, 407, 502, 503].includes(error.status)) {
+    return "The request never reached Facebook — a proxy or firewall blocked it. Check outbound access to graph.facebook.com.";
+  }
+  return "Check the Graph API message for details.";
 }
